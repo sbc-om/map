@@ -12,12 +12,7 @@ import {
 } from "lucide-react";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { MapUser } from "./MapUser";
-
-interface Country {
-  id: string;
-  name: string;
-  nameLong: string;
-}
+import { searchCountries, type Country } from "@/lib/countries";
 
 interface MapSearchBarProps {
   onCountrySelect: (countryId: string) => void;
@@ -70,13 +65,7 @@ export function MapSearchBar({
     const fetchCountries = async () => {
       setLoading(true);
       try {
-        const query = searchQuery.trim();
-        const url = query
-          ? `/api/countries/search?q=${encodeURIComponent(query)}`
-          : "/api/countries/search";
-
-        const response = await fetch(url);
-        const data = await response.json();
+        const data = await searchCountries(searchQuery.trim());
         setCountries(data);
       } catch {
         setCountries([]);

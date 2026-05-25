@@ -15,9 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SBC MAP",
-  description:
-    "Enterprise-grade Next.js 16 starter template with vanilla Leaflet integration",
+  title: "SBC Map",
+  description: "Interactive world map powered by Next.js and Leaflet — SBC Open Map",
 };
 
 export default function RootLayout({

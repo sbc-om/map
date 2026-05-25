@@ -14,6 +14,7 @@ import { MapMeasurementPanel } from "./MapMeasurementPanel";
 import { MapContextMenu } from "./MapContextMenu";
 import { MapPOIPanel } from "./MapPOIPanel";
 import { useMapTileProvider } from "@/hooks/useMapTileProvider";
+import { getCountryFeature } from "@/lib/countries";
 import { useMapContextMenu } from "@/hooks/useMapContextMenu";
 import { useMapMarkers } from "@/hooks/useMapMarkers";
 import { usePOIManager } from "@/hooks/usePOIManager";
@@ -82,11 +83,8 @@ export function MapMain() {
   // Memoized callbacks to prevent unnecessary re-renders
   const handleCountrySelect = useCallback(async (countryId: string) => {
     try {
-      const response = await fetch(
-        `/api/countries/${encodeURIComponent(countryId)}`
-      );
-      const feature = await response.json();
-      setSelectedCountry(feature);
+      const feature = await getCountryFeature(countryId);
+      if (feature) setSelectedCountry(feature);
     } catch (error) {
       console.error("Error loading country GeoJSON:", error);
     }
