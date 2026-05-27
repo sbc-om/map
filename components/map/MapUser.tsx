@@ -12,6 +12,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useTheme } from "@/hooks/useTheme";
 
+const TEST_USER = {
+  name: "John Doe",
+  email: "john.doe@example.com",
+  initials: "JD",
+} as const;
+
 /**
  * MapUser - User profile dropdown menu
  * Shows user info and navigation options
@@ -30,16 +36,16 @@ export function MapUser() {
       <DropdownMenuTrigger asChild>
         <button className="rounded-full bg-white dark:bg-gray-800 p-1 shadow-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:ring-offset-2">
           <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-400 to-green-400 flex items-center justify-center text-white font-semibold text-sm">
-            W
+            {TEST_USER.initials}
           </div>
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56 z-[1100]">
         <DropdownMenuLabel>
           <div className="flex flex-col space-y-1">
-            <p className="text-sm font-medium leading-none">Welly Wahyudi</p>
+            <p className="text-sm font-medium leading-none">{TEST_USER.name}</p>
             <p className="text-xs leading-none text-muted-foreground">
-              welly@example.com
+              {TEST_USER.email}
             </p>
           </div>
         </DropdownMenuLabel>
