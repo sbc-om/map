@@ -13,7 +13,9 @@ import {
   Edit2,
   MapPin,
   XCircle,
+  Navigation2,
 } from "lucide-react";
+import { DirectionsView } from "./DirectionsView";
 import { Drawer } from "vaul";
 import { toast } from "sonner";
 import type { POI, POICategory } from "@/types/poi";
@@ -47,16 +49,18 @@ interface MapPOIPanelProps {
   onFlyTo: (poi: POI) => void;
   onRequestLocation?: () => void;
   onClearCoordinates?: () => void;
-  onModeChange?: (mode: "list" | "add" | "edit") => void;
+  onModeChange?: (mode: string) => void;
   isSelectingLocation?: boolean;
   initialLat?: number;
   initialLng?: number;
   cursorLat?: number;
   cursorLng?: number;
-  mode?: "list" | "add"; // Control view mode from parent
+  mode?: "list" | "add" | "directions"; // Control view mode from parent
+  /** Pre-fill destination when opened via context-menu "Directions to here" */
+  directionsInitialTo?: string;
 }
 
-type ViewMode = "list" | "add" | "edit";
+type ViewMode = "list" | "add" | "edit" | "directions";
 
 interface POIFormData {
   title: string;
@@ -173,6 +177,7 @@ export const MapPOIPanel = memo(function MapPOIPanel({
   cursorLat,
   cursorLng,
   mode: externalMode,
+  directionsInitialTo = "",
 }: MapPOIPanelProps) {
   const [isMobile, setIsMobile] = useState(false);
   const [editingPOI, setEditingPOI] = useState<POI | null>(null);
@@ -402,6 +407,16 @@ export const MapPOIPanel = memo(function MapPOIPanel({
    * Render content based on view mode
    */
   const renderContent = () => {
+    // Directions view
+    if (viewMode === "directions") {
+      return (
+        <DirectionsView
+          key={directionsInitialTo}
+          initialTo={directionsInitialTo}
+        />
+      );
+    }
+
     // Form view (Add/Edit)
     if (viewMode === "add" || viewMode === "edit") {
       return (
@@ -611,9 +626,9 @@ export const MapPOIPanel = memo(function MapPOIPanel({
 
   const content = (
     <div className="flex flex-col h-full">
-      {/* Header Image - Hidden on mobile */}
-      {!isMobile && (
-        <div className="relative h-48 w-full overflow-hidden bg-gradient-to-br from-blue-400 to-purple-600">
+      {/* Header Image - Hidden on mobile AND in directions mode */}
+      {!isMobile && viewMode !== "directions" && (
+        <div className="relative isolate h-48 w-full overflow-hidden bg-gradient-to-br from-blue-400 to-purple-600">
           <Image
             src="/poi-bg.png"
             alt="POI Background"
@@ -650,6 +665,25 @@ export const MapPOIPanel = memo(function MapPOIPanel({
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             {displayPOIs.length} {displayPOIs.length === 1 ? "place" : "places"}
           </p>
+        </div>
+      )}
+
+      {/* Top Bar (for directions mode) */}
+      {viewMode === "directions" && (
+        <div className="flex items-center gap-3 px-4 py-4 border-b dark:border-gray-800 bg-white dark:bg-gray-900 flex-shrink-0">
+          <button
+            onClick={() => setViewMode("list")}
+            className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            aria-label="Back"
+          >
+            <ArrowLeft className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+          </button>
+          <div className="flex items-center gap-2">
+            <Navigation2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            <h2 className="text-base font-semibold text-gray-900 dark:text-white">
+              Directions
+            </h2>
+          </div>
         </div>
       )}
 
@@ -713,8 +747,20 @@ export const MapPOIPanel = memo(function MapPOIPanel({
             className="fixed flex flex-col bg-white dark:bg-gray-900 rounded-t-[10px] bottom-0 left-0 right-0 h-full max-h-[97%] !z-[1100] shadow-[0_-10px_40px_rgba(0,0,0,0.2)]"
             aria-describedby={undefined}
           >
-            <div className="mx-auto mt-4 h-2 w-[100px] rounded-full bg-gray-300 dark:bg-gray-600" />
-            <div className="flex-1 overflow-hidden">
+            {/* Handle bar + explicit close button */}
+            <div className="flex items-center justify-between px-4 pt-3 pb-1 flex-shrink-0">
+              <div className="w-8" />
+              <div className="h-1.5 w-12 rounded-full bg-gray-300 dark:bg-gray-600" />
+              <button
+                onClick={onClose}
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                aria-label="Close"
+              >
+                <X className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+              </button>
+            </div>
+
+            <div className="flex-1 min-h-0 overflow-hidden">
               <Drawer.Title className="sr-only">{categoryName}</Drawer.Title>
               {content}
             </div>
@@ -731,12 +777,12 @@ export const MapPOIPanel = memo(function MapPOIPanel({
         isOpen ? "translate-x-0" : "-translate-x-full"
       }`}
     >
-      {/* Close Button */}
+      {/* Close Button — z-[60] so it stays above header image overlays (z-10/z-20) */}
       <button
         onClick={() => {
           onClose();
         }}
-        className="absolute top-4 right-4 z-10 p-2 rounded-full bg-white/90 dark:bg-gray-800/90 hover:bg-white dark:hover:bg-gray-800 shadow-lg transition-colors"
+        className="absolute top-4 right-4 z-[60] p-2 rounded-full bg-white/90 dark:bg-gray-800/90 hover:bg-white dark:hover:bg-gray-800 shadow-lg transition-colors"
         aria-label="Close"
       >
         <X className="h-5 w-5 text-gray-700 dark:text-gray-300" />

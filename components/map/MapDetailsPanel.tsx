@@ -74,7 +74,7 @@ export function MapDetailsPanel({ country, onClose }: MapDetailsPanelProps) {
     <div className="flex flex-col h-full">
       {/* Header Image - Hidden on mobile */}
       {!isMobile && (
-        <div className="relative h-48 w-full overflow-hidden bg-gradient-to-br from-blue-400 to-blue-600">
+        <div className="relative isolate h-48 w-full overflow-hidden bg-gradient-to-br from-blue-400 to-blue-600">
           {/* Background landscape image */}
           <Image
             src="/vecteezy_village-and-mountains-landscape-illustration_11871677-1.jpg"
@@ -281,10 +281,10 @@ export function MapDetailsPanel({ country, onClose }: MapDetailsPanelProps) {
         country ? "translate-x-0" : "-translate-x-full"
       }`}
     >
-      {/* Close Button */}
+      {/* Close Button — z-[60] so it stays above header image overlays (z-10/z-20) */}
       <button
         onClick={onClose}
-        className="absolute top-4 right-4 z-10 p-2 rounded-full bg-white/90 dark:bg-gray-800/90 hover:bg-white dark:hover:bg-gray-800 shadow-lg transition-colors"
+        className="absolute top-4 right-4 z-[60] p-2 rounded-full bg-white/90 dark:bg-gray-800/90 hover:bg-white dark:hover:bg-gray-800 shadow-lg transition-colors"
         aria-label="Close"
       >
         <X className="h-5 w-5 text-gray-700 dark:text-gray-300" />

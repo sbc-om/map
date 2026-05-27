@@ -41,3 +41,5 @@ export { MapMeasurementPanel } from './MapMeasurementPanel';
 export { MapDetailsPanel } from './MapDetailsPanel';
 export { MapContextMenu } from './MapContextMenu';
 export { MapPOIPanel } from './MapPOIPanel';
+export { MapDirectionsPanel } from './MapDirectionsPanel';
+export { MapStatusBar } from './MapStatusBar';

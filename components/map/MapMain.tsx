@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { toast } from "sonner";
 import { LeafletMap } from "./LeafletMap";
 import { LeafletTileLayer } from "./LeafletTileLayer";
@@ -18,69 +18,74 @@ import { getCountryFeature } from "@/lib/countries";
 import { useMapContextMenu } from "@/hooks/useMapContextMenu";
 import { useMapMarkers } from "@/hooks/useMapMarkers";
 import { usePOIManager } from "@/hooks/usePOIManager";
+import { useLeafletMap } from "@/hooks/useLeafletMap";
 import type { POICategory } from "@/types/poi";
 
-// Memoized style object to prevent unnecessary re-renders
+// Memoized GeoJSON style
 const GEOJSON_STYLE = {
   fillColor: "#3b82f6",
-  fillOpacity: 0.2,
+  fillOpacity: 0.15,
   color: "#2563eb",
   weight: 2,
 } as const;
 
 /**
- * MapMain - Main map component with theme-aware tile provider
+ * MapMain — root map component.
  *
- * Optimizations:
- * - Memoized callbacks to prevent unnecessary re-renders
- * - Static style object for GeoJSON
- * - Stable function references
+ * New features vs previous version:
+ * - MapDirectionsPanel (OSRM routing)
+ * - MapStatusBar (coordinate/zoom display)
+ * - Share URL on mount (fly to ?lat=&lng=&zoom= params)
+ * - Directions shortcut from context menu
+ * - onDirectionsClick wired in search bar
  */
 export function MapMain() {
+  // ── State ──────────────────────────────────────────────────────────────────
   const [selectedCountry, setSelectedCountry] =
     useState<GeoJSON.Feature | null>(null);
   const [isMeasurementOpen, setIsMeasurementOpen] = useState(false);
   const [isPOIPanelOpen, setIsPOIPanelOpen] = useState(false);
+  const [directionsInitialTo, setDirectionsInitialTo] = useState("");
   const [poiFilterCategory, setPOIFilterCategory] =
     useState<POICategory | null>(null);
   const [poiInitialCoords, setPOIInitialCoords] = useState<{
     lat: number;
     lng: number;
   } | null>(null);
-  const [poiPanelMode, setPOIPanelMode] = useState<"list" | "add">("list");
+  const [poiPanelMode, setPOIPanelMode] = useState<"list" | "add" | "directions">("list");
   const [isSelectingPOILocation, setIsSelectingPOILocation] = useState(false);
   const [cursorCoords, setCursorCoords] = useState<{
     lat: number;
     lng: number;
   } | null>(null);
 
-  // Use custom hook for theme-aware tile provider management
+  // ── Hooks ──────────────────────────────────────────────────────────────────
+  const map = useLeafletMap();
   const { tileProvider, currentProviderId, setProviderId } =
     useMapTileProvider();
-
-  // Context menu hook
-  const {
-    isOpen: isContextMenuOpen,
-    position: contextMenuPosition,
-    close: closeContextMenu,
-  } = useMapContextMenu();
-
-  // User markers hook
+  const { isOpen: isContextMenuOpen, position: contextMenuPosition, close: closeContextMenu } =
+    useMapContextMenu();
   const { addMarker } = useMapMarkers();
+  const { pois, addPOI, updatePOI, deletePOI, clearAllPOIs, exportGeoJSON, importGeoJSON, flyToPOI } =
+    usePOIManager();
 
-  // POI Manager hook
-  const {
-    pois,
-    addPOI,
-    updatePOI,
-    deletePOI,
-    clearAllPOIs,
-    exportGeoJSON,
-    importGeoJSON,
-    flyToPOI,
-  } = usePOIManager();
+  // ── Deep-link: fly to ?lat=&lng=&zoom= on mount ────────────────────────────
+  useEffect(() => {
+    if (!map) return;
+    const params = new URLSearchParams(window.location.search);
+    const lat = parseFloat(params.get("lat") ?? "");
+    const lng = parseFloat(params.get("lng") ?? "");
+    const zoom = parseInt(params.get("zoom") ?? "", 10);
+    if (!isNaN(lat) && !isNaN(lng)) {
+      map.flyTo([lat, lng], !isNaN(zoom) ? zoom : 13, {
+        animate: true,
+        duration: 1.5,
+      });
+    }
+  }, [map]);
 
-  // Memoized callbacks to prevent unnecessary re-renders
+  // ── Callbacks ──────────────────────────────────────────────────────────────
+
   const handleCountrySelect = useCallback(async (countryId: string) => {
     try {
       const feature = await getCountryFeature(countryId);
@@ -90,39 +95,50 @@ export function MapMain() {
     }
   }, []);
 
-  const handleClearSelection = useCallback(() => {
-    setSelectedCountry(null);
-  }, []);
+  const handleClearSelection = useCallback(() => setSelectedCountry(null), []);
 
-  const handleMeasurementOpen = useCallback(() => {
-    setIsMeasurementOpen(true);
-  }, []);
-
-  const handleMeasurementClose = useCallback(() => {
-    setIsMeasurementOpen(false);
-  }, []);
-
-  // Context menu handlers
-  const handleAddMarker = useCallback(
-    (lat: number, lng: number) => {
-      addMarker(lat, lng);
-    },
-    [addMarker]
+  // Measurement
+  const handleMeasurementOpen = useCallback(
+    () => setIsMeasurementOpen(true),
+    []
+  );
+  const handleMeasurementClose = useCallback(
+    () => setIsMeasurementOpen(false),
+    []
   );
 
-  const handleContextMenuMeasurement = useCallback(() => {
-    setIsMeasurementOpen(true);
+  // Directions — now shown inside the POI sidebar as mode='directions'
+  const handleDirectionsOpen = useCallback((to = "") => {
+    setDirectionsInitialTo(to);
+    setPOIPanelMode("directions");
+    setIsPOIPanelOpen(true);
+    setPOIFilterCategory(null);
+    setPOIInitialCoords(null);
   }, []);
 
+  // Context menu
+  const handleAddMarker = useCallback(
+    (lat: number, lng: number) => addMarker(lat, lng),
+    [addMarker]
+  );
+  const handleContextMenuMeasurement = useCallback(
+    () => setIsMeasurementOpen(true),
+    []
+  );
   const handleContextMenuAddPOI = useCallback((lat: number, lng: number) => {
-    // Always set fresh coordinates - this ensures updates even if panel is already open
     setPOIInitialCoords({ lat, lng });
     setPOIFilterCategory(null);
     setPOIPanelMode("add");
     setIsPOIPanelOpen(true);
   }, []);
+  const handleContextMenuDirections = useCallback(
+    (_lat: number, _lng: number) => {
+      handleDirectionsOpen();
+    },
+    [handleDirectionsOpen]
+  );
 
-  // POI Panel handlers
+  // POI
   const handleOpenPOIPanel = useCallback((category?: POICategory) => {
     setPOIFilterCategory(category || null);
     setPOIInitialCoords(null);
@@ -134,31 +150,29 @@ export function MapMain() {
     setIsPOIPanelOpen(false);
     setIsSelectingPOILocation(false);
     setPOIPanelMode("list");
-    // Reset coordinates and category after a brief delay to allow panel to close smoothly
     setTimeout(() => {
       setPOIFilterCategory(null);
       setPOIInitialCoords(null);
     }, 100);
   }, []);
 
-  // Handle POI location selection request
   const handleRequestPOILocation = useCallback(() => {
     setIsSelectingPOILocation((prev) => !prev);
   }, []);
 
-  // Handle clear POI coordinates
   const handleClearPOICoordinates = useCallback(() => {
     setPOIInitialCoords(null);
     setCursorCoords(null);
     setIsSelectingPOILocation(false);
   }, []);
 
-  // Handle POI panel mode change
-  const handlePOIModeChange = useCallback((mode: "list" | "add" | "edit") => {
-    setPOIPanelMode(mode as "list" | "add");
+  const handlePOIModeChange = useCallback((mode: string) => {
+    if (mode === "list" || mode === "add") {
+      setPOIPanelMode(mode);
+    }
+    // 'directions' mode is managed via handleDirectionsOpen; 'edit' stays internal
   }, []);
 
-  // Handle map click for POI location selection
   const handleMapClick = useCallback(
     (lat: number, lng: number) => {
       if (isSelectingPOILocation) {
@@ -170,12 +184,9 @@ export function MapMain() {
     [isSelectingPOILocation]
   );
 
-  // Handle map mouse move for cursor tracking
   const handleMapMouseMove = useCallback(
     (lat: number, lng: number) => {
-      if (isSelectingPOILocation) {
-        setCursorCoords({ lat, lng });
-      }
+      if (isSelectingPOILocation) setCursorCoords({ lat, lng });
     },
     [isSelectingPOILocation]
   );
@@ -200,36 +211,33 @@ export function MapMain() {
         const geojson = JSON.parse(text);
         const count = importGeoJSON(geojson);
         toast.success(
-          `Successfully imported ${count} place${count !== 1 ? "s" : ""}!`
+          `Imported ${count} place${count !== 1 ? "s" : ""} successfully!`
         );
-      } catch (error) {
-        console.error("Failed to import POIs:", error);
+      } catch {
         toast.error("Failed to import file. Please check the format.");
       }
     },
     [importGeoJSON]
   );
 
-  // Category click handler for MapTopBar
   const handleCategoryClick = useCallback(
     (categoryId: string) => {
-      // Map category IDs to POI categories
-      const categoryMapping: Record<string, POICategory> = {
+      const map: Record<string, POICategory> = {
         restaurants: "food-drink",
         hotels: "lodging",
         attractions: "tourism",
         transit: "transport",
       };
-
-      const poiCategory = categoryMapping[categoryId.toLowerCase()];
-      if (poiCategory) {
-        handleOpenPOIPanel(poiCategory);
-      }
+      const cat = map[categoryId.toLowerCase()];
+      if (cat) handleOpenPOIPanel(cat);
     },
     [handleOpenPOIPanel]
   );
 
-  // Memoize tile layer props to prevent unnecessary updates
+  // Is any left-side panel currently open? Used to shift the search bar and hide category pills.
+  const isLeftPanelOpen = isPOIPanelOpen || !!selectedCountry;
+
+  // Memoised tile props
   const tileLayerProps = useMemo(
     () => ({
       url: tileProvider.url,
@@ -239,9 +247,10 @@ export function MapMain() {
     [tileProvider.url, tileProvider.attribution, tileProvider.maxZoom]
   );
 
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="relative h-screen w-full overflow-hidden">
-      {/* Map */}
+      {/* ── Map ── */}
       <LeafletMap
         className="w-full h-full"
         onClick={handleMapClick}
@@ -256,42 +265,44 @@ export function MapMain() {
         <LeafletGeoJSON data={selectedCountry} style={GEOJSON_STYLE} />
       </LeafletMap>
 
-      {/* Search Bar */}
+      {/* ── Search Bar ── */}
       <MapSearchBar
         onCountrySelect={handleCountrySelect}
         selectedCountry={selectedCountry}
         onClearSelection={handleClearSelection}
         onMeasurementClick={handleMeasurementOpen}
         onPOIClick={() => handleOpenPOIPanel()}
-        isPOIPanelOpen={isPOIPanelOpen}
-        onClosePOIPanel={handleClosePOIPanel}
+        onDirectionsClick={() => handleDirectionsOpen()}
+        onCategoryClick={handleCategoryClick}
+        leftPanelOpen={isLeftPanelOpen}
       />
 
-      {/* Top Bar */}
-      <MapTopBar onCategoryClick={handleCategoryClick} />
+      {/* ── Top Bar (theme + user) ── */}
+      <MapTopBar />
 
-      {/* Tile Switcher */}
+      {/* ── Tile Switcher ── */}
       <MapTileSwitcher
         selectedProviderId={currentProviderId}
         onProviderChange={setProviderId}
       />
 
-      {/* Map Controls */}
+      {/* ── Controls ── */}
       <MapControls />
 
-      {/* Country Details Panel */}
+
+      {/* ── Details Panel ── */}
       <MapDetailsPanel
         country={selectedCountry}
         onClose={handleClearSelection}
       />
 
-      {/* Measurement Panel */}
+      {/* ── Measurement Panel ── */}
       <MapMeasurementPanel
         isOpen={isMeasurementOpen}
         onClose={handleMeasurementClose}
       />
 
-      {/* Context Menu */}
+      {/* ── Context Menu ── */}
       <MapContextMenu
         isOpen={isContextMenuOpen}
         position={contextMenuPosition}
@@ -299,9 +310,10 @@ export function MapMain() {
         onAddMarker={handleAddMarker}
         onStartMeasurement={handleContextMenuMeasurement}
         onAddPOI={handleContextMenuAddPOI}
+        onDirections={handleContextMenuDirections}
       />
 
-      {/* POI Panel */}
+      {/* ── POI + Directions Panel (unified sidebar) ── */}
       <MapPOIPanel
         isOpen={isPOIPanelOpen}
         onClose={handleClosePOIPanel}
@@ -323,6 +335,7 @@ export function MapMain() {
         cursorLat={cursorCoords?.lat}
         cursorLng={cursorCoords?.lng}
         mode={poiPanelMode}
+        directionsInitialTo={directionsInitialTo}
       />
     </div>
   );

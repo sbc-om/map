@@ -2,53 +2,76 @@
  * Tile provider configurations
  */
 
-import type { TileProvider } from '@/types/map';
+import type { TileProvider } from "@/types/map";
 
 /**
  * Available tile providers
  */
 export const TILE_PROVIDERS: TileProvider[] = [
   {
-    id: 'osm',
-    name: 'OpenStreetMap',
-    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    id: "osm",
+    name: "Standard",
+    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     maxZoom: 19,
-    category: 'standard',
+    category: "standard",
   },
   {
-    id: 'satellite',
-    name: 'Satellite',
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    attribution: '&copy; <a href="https://www.esri.com/">Esri World Imagery </a>',
+    id: "satellite",
+    name: "Satellite",
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    attribution: '&copy; <a href="https://www.esri.com/">Esri</a>, Maxar, GeoEye, Earthstar Geographics',
     maxZoom: 18,
-    category: 'satellite',
+    category: "satellite",
   },
   {
-    id: 'dark',
-    name: 'Dark Mode',
-    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    id: "dark",
+    name: "Dark",
+    url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
     maxZoom: 19,
-    category: 'dark',
+    category: "dark",
+  },
+  {
+    id: "light",
+    name: "Light",
+    url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    maxZoom: 19,
+    category: "standard",
+  },
+  {
+    id: "terrain",
+    name: "Terrain",
+    url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="https://opentopomap.org">OpenTopoMap</a>',
+    maxZoom: 17,
+    category: "standard",
+  },
+  {
+    id: "streets",
+    name: "Streets",
+    url: "https://tiles.stadiamaps.com/tiles/osm_bright/{z}/{x}/{y}{r}.png",
+    attribution:
+      '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a>, &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 20,
+    category: "standard",
   },
 ];
 
-/**
- * Default tile provider ID
- */
-export const DEFAULT_TILE_PROVIDER_ID = 'osm';
+export const DEFAULT_TILE_PROVIDER_ID = "osm";
 
-/**
- * Get tile provider by ID
- */
 export function getTileProviderById(id: string): TileProvider | undefined {
-  return TILE_PROVIDERS.find(provider => provider.id === id);
+  return TILE_PROVIDERS.find((p) => p.id === id);
 }
 
-/**
- * Get default tile provider
- */
 export function getDefaultTileProvider(): TileProvider {
-  return TILE_PROVIDERS.find(provider => provider.id === DEFAULT_TILE_PROVIDER_ID) || TILE_PROVIDERS[0];
+  return (
+    TILE_PROVIDERS.find((p) => p.id === DEFAULT_TILE_PROVIDER_ID) ??
+    TILE_PROVIDERS[0]
+  );
 }

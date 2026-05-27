@@ -33,8 +33,8 @@ export function useMapControls() {
 
     const resetView = useCallback(() => {
         if (map) {
-            // Reset to default view
-            map.setView([-2.911154, 120.074263], 5);
+            // Reset to Oman default view
+            map.flyTo([22.5796, 58.4093], 7, { animate: true, duration: 1.2 });
         }
     }, [map]);
 

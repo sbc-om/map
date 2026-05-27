@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useCallback, useEffect, useRef, useState, useMemo } from "react";
-import { Copy, MapPin, Ruler, Check, Star } from "lucide-react";
+import { Copy, MapPin, Ruler, Check, Star, Navigation2 } from "lucide-react";
 import { formatDecimalDegrees } from "@/lib/utils/coordinates";
 import type { ContextMenuPosition } from "@/hooks/useMapContextMenu";
 
@@ -12,6 +12,7 @@ interface MapContextMenuProps {
   onAddMarker: (lat: number, lng: number) => void;
   onStartMeasurement: () => void;
   onAddPOI?: (lat: number, lng: number) => void;
+  onDirections?: (lat: number, lng: number) => void;
 }
 
 interface MenuItemProps {
@@ -79,6 +80,7 @@ export const MapContextMenu = memo(function MapContextMenu({
   onAddMarker,
   onStartMeasurement,
   onAddPOI,
+  onDirections,
 }: MapContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   // Track which position was copied (null means not copied)
@@ -185,6 +187,15 @@ export const MapContextMenu = memo(function MapContextMenu({
   }, [position, onAddPOI, onClose]);
 
   /**
+   * Handle get directions to this point
+   */
+  const handleDirections = useCallback(() => {
+    if (!position || !onDirections) return;
+    onDirections(position.latlng.lat, position.latlng.lng);
+    onClose();
+  }, [position, onDirections, onClose]);
+
+  /**
    * Handle click outside to close
    */
   useEffect(() => {
@@ -250,19 +261,27 @@ export const MapContextMenu = memo(function MapContextMenu({
         onClick={handleStartMeasurement}
       />
 
-      {/* Add to My Places (if handler provided) */}
-      {onAddPOI && (
-        <>
-          {/* Divider */}
-          <div className="my-1.5 border-t border-gray-200 dark:border-gray-700" />
+      {/* Divider */}
+      <div className="my-1.5 border-t border-gray-200 dark:border-gray-700" />
 
-          <MenuItem
-            icon={<Star className="h-4 w-4" />}
-            label="Add to My Places"
-            sublabel="Save this location"
-            onClick={handleAddPOI}
-          />
-        </>
+      {/* Directions to here */}
+      {onDirections && (
+        <MenuItem
+          icon={<Navigation2 className="h-4 w-4" />}
+          label="Directions to here"
+          sublabel="Open directions panel"
+          onClick={handleDirections}
+        />
+      )}
+
+      {/* Add to My Places */}
+      {onAddPOI && (
+        <MenuItem
+          icon={<Star className="h-4 w-4" />}
+          label="Add to My Places"
+          sublabel="Save this location"
+          onClick={handleAddPOI}
+        />
       )}
     </div>
   );

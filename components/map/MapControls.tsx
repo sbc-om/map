@@ -1,122 +1,128 @@
 "use client";
 
-import { memo, useState, useEffect } from "react";
-import { Plus, Minus, Maximize2, Minimize2 } from "lucide-react";
+import { memo, useState, useEffect, useCallback } from "react";
+import { Plus, Minus, Maximize2, Minimize2, Share2, Check, Compass } from "lucide-react";
 import { useMapControls } from "@/hooks/useMapControls";
 import { useGeolocation } from "@/hooks/useGeolocation";
+import { toast } from "sonner";
 
 /**
- * MapControls - Map control buttons at bottom right
- * Includes: Location, Zoom In/Out, Reset View, Fullscreen
+ * MapControls — right-side control dock.
  *
- * Uses project's useMapControls hook for map interactions
- * Memoized to prevent unnecessary re-renders
+ * Layout (bottom → top):
+ *   Fullscreen · Share · Compass · [Zoom+/−] · Locate
+ *
+ * Spacing accounts for MapStatusBar at the very bottom (~28px).
  */
 export const MapControls = memo(function MapControls() {
-  const { map, zoomIn, zoomOut, toggleFullscreen, resetView } =
-    useMapControls();
+  const { map, zoomIn, zoomOut, toggleFullscreen, resetView } = useMapControls();
   const { locateUser, isLocating, isAvailable } = useGeolocation();
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [shared, setShared] = useState(false);
 
-  // Listen for fullscreen changes
   useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-
-    document.addEventListener("fullscreenchange", handleFullscreenChange);
-    return () => {
-      document.removeEventListener("fullscreenchange", handleFullscreenChange);
-    };
+    const handler = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", handler);
+    return () => document.removeEventListener("fullscreenchange", handler);
   }, []);
 
+  const handleShare = useCallback(async () => {
+    if (!map) return;
+    const c = map.getCenter();
+    const params = new URLSearchParams({
+      lat: c.lat.toFixed(6),
+      lng: c.lng.toFixed(6),
+      zoom: String(map.getZoom()),
+    });
+    const url = `${window.location.origin}/map?${params}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setShared(true);
+      toast.success("Map link copied!", { duration: 2000 });
+      setTimeout(() => setShared(false), 2000);
+    } catch {
+      toast.error("Could not copy link");
+    }
+  }, [map]);
+
   return (
-    <div className="absolute bottom-24 sm:bottom-8 right-4 flex flex-col items-center gap-2 z-[1000]">
-      {/* Location Button */}
-      <button
-        onClick={locateUser}
-        disabled={!isAvailable || isLocating}
-        className={`flex h-9 w-9 items-center justify-center rounded-full bg-white dark:bg-slate-700 shadow-lg hover:bg-gray-50 dark:hover:bg-slate-600 ${
-          isLocating ? "animate-pulse" : ""
-        } disabled:opacity-50 disabled:cursor-not-allowed`}
-        title="Find my location"
-        aria-label="Find my location"
-      >
+    <div className="absolute bottom-6 right-4 flex flex-col items-center gap-2 z-[1000]">
+      {/* Locate */}
+      <Btn onClick={locateUser} disabled={!isAvailable || isLocating} title="My location">
         <svg
-          className={`h-5 w-5 ${
-            isLocating
-              ? "text-blue-600 dark:text-blue-400"
-              : "text-gray-600 dark:text-gray-100"
-          }`}
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
+          className={`h-[17px] w-[17px] ${isLocating ? "text-blue-500 animate-pulse" : "text-gray-600 dark:text-gray-200"}`}
+          viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
         >
           <circle cx="12" cy="12" r="3" />
           <path d="M12 2v4m0 12v4m10-10h-4M6 12H2" />
         </svg>
-      </button>
+      </Btn>
 
-      {/* Zoom Controls */}
-      <div className="flex flex-col overflow-hidden rounded-lg bg-white dark:bg-slate-700 shadow-lg">
+      {/* Zoom group */}
+      <div className="flex flex-col overflow-hidden rounded-xl bg-white dark:bg-gray-900 shadow-md border border-gray-100 dark:border-gray-800">
         <button
-          onClick={zoomIn}
-          disabled={!map}
-          className="flex h-9 w-9 items-center justify-center border-b border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
-          title="Zoom in"
-          aria-label="Zoom in"
+          onClick={zoomIn} disabled={!map}
+          title="Zoom in" aria-label="Zoom in"
+          className="flex h-9 w-9 items-center justify-center border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-30 transition-colors"
         >
-          <Plus className="h-5 w-5 text-gray-600 dark:text-gray-100" />
+          <Plus className="h-4 w-4 text-gray-700 dark:text-gray-200" />
         </button>
         <button
-          onClick={zoomOut}
-          disabled={!map}
-          className="flex h-9 w-9 items-center justify-center hover:bg-gray-50 dark:hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
-          title="Zoom out"
-          aria-label="Zoom out"
+          onClick={zoomOut} disabled={!map}
+          title="Zoom out" aria-label="Zoom out"
+          className="flex h-9 w-9 items-center justify-center hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-30 transition-colors"
         >
-          <Minus className="h-5 w-5 text-gray-600 dark:text-gray-100" />
+          <Minus className="h-4 w-4 text-gray-700 dark:text-gray-200" />
         </button>
       </div>
 
-      {/* Reset View Button */}
-      <button
-        onClick={resetView}
-        disabled={!map}
-        className="flex h-9 w-9 items-center justify-center rounded bg-white dark:bg-slate-700 shadow-lg hover:bg-gray-50 dark:hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
-        title="Reset view"
-        aria-label="Reset view to default"
-      >
-        <svg
-          className="h-5 w-5 text-gray-600 dark:text-gray-100"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-        >
-          <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
-          <path d="M21 3v5h-5" />
-          <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
-          <path d="M3 21v-5h5" />
-        </svg>
-      </button>
+      {/* Compass / Reset view */}
+      <Btn onClick={resetView} disabled={!map} title="Reset to Oman">
+        <Compass className="h-[17px] w-[17px] text-gray-600 dark:text-gray-200" />
+      </Btn>
 
-      {/* Fullscreen Button */}
-      <button
-        onClick={toggleFullscreen}
-        className="flex h-9 w-9 items-center justify-center rounded bg-white dark:bg-slate-700 shadow-lg hover:bg-gray-50 dark:hover:bg-slate-600"
-        title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-        aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-      >
-        {isFullscreen ? (
-          <Minimize2 className="h-5 w-5 text-gray-600 dark:text-gray-100" />
-        ) : (
-          <Maximize2 className="h-5 w-5 text-gray-600 dark:text-gray-100" />
-        )}
-      </button>
+      {/* Share */}
+      <Btn onClick={handleShare} disabled={!map} title="Share map view"
+           className={shared ? "!border-green-400 !text-green-600" : ""}>
+        {shared
+          ? <Check className="h-[17px] w-[17px] text-green-500" />
+          : <Share2 className="h-[17px] w-[17px] text-gray-600 dark:text-gray-200" />
+        }
+      </Btn>
+
+      {/* Fullscreen */}
+      <Btn onClick={toggleFullscreen} title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}>
+        {isFullscreen
+          ? <Minimize2 className="h-[17px] w-[17px] text-gray-600 dark:text-gray-200" />
+          : <Maximize2 className="h-[17px] w-[17px] text-gray-600 dark:text-gray-200" />
+        }
+      </Btn>
     </div>
   );
 });
 
 MapControls.displayName = "MapControls";
+
+// ─── Shared button ────────────────────────────────────────────────────────────
+
+function Btn({
+  onClick, disabled, title, className = "", children,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  title: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      aria-label={title}
+      className={`flex h-9 w-9 items-center justify-center rounded-xl bg-white dark:bg-gray-900 shadow-md border border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 hover:shadow-lg disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150 active:scale-95 ${className}`}
+    >
+      {children}
+    </button>
+  );
+}
