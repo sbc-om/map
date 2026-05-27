@@ -625,7 +625,7 @@ export const MapPOIPanel = memo(function MapPOIPanel({
   };
 
   const content = (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col flex-1 min-h-0">
       {/* Header Image - Hidden on mobile AND in directions mode */}
       {!isMobile && viewMode !== "directions" && (
         <div className="relative isolate h-48 w-full overflow-hidden bg-gradient-to-br from-blue-400 to-purple-600">
@@ -760,7 +760,7 @@ export const MapPOIPanel = memo(function MapPOIPanel({
               </button>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-hidden">
+            <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
               <Drawer.Title className="sr-only">{categoryName}</Drawer.Title>
               {content}
             </div>
@@ -773,7 +773,7 @@ export const MapPOIPanel = memo(function MapPOIPanel({
   // Desktop: Side Panel
   return (
     <div
-      className={`absolute top-0 left-0 h-full w-96 bg-white dark:bg-gray-900 shadow-2xl z-[1000] transform transition-transform duration-300 ${
+      className={`absolute top-0 left-0 h-full w-96 flex flex-col bg-white dark:bg-gray-900 shadow-2xl z-[1000] transform transition-transform duration-300 ${
         isOpen ? "translate-x-0" : "-translate-x-full"
       }`}
     >
