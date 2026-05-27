@@ -184,7 +184,51 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
-/* Blob animation for gradient background */
+/* =====================================================
+   Landing Page Animations
+   ===================================================== */
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(32px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes gradientFlow {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+@keyframes shimmerLine {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+
+.animate-fadeInUp {
+  animation: fadeInUp 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-gradient-flow {
+  background-size: 200% 200%;
+  animation: gradientFlow 5s ease infinite;
+}
+
+.animation-delay-100 { animation-delay: 0.1s; }
+.animation-delay-200 { animation-delay: 0.2s; }
+.animation-delay-300 { animation-delay: 0.3s; }
+.animation-delay-400 { animation-delay: 0.4s; }
+.animation-delay-500 { animation-delay: 0.5s; }
+.animation-delay-600 { animation-delay: 0.65s; }
+.animation-delay-700 { animation-delay: 0.8s; }
+.animation-delay-800 { animation-delay: 0.95s; }
+
+/* =====================================================
+   Blob animation for gradient background */
 @keyframes blob {
   0%, 100% {
     transform: translate(0px, 0px) scale(1);
