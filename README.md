@@ -116,8 +116,8 @@ Edit `constants/map-config.ts`:
 
 ```typescript
 export const DEFAULT_MAP_CONFIG: MapConfig = {
-  defaultCenter: [-2.911154, 120.074263], // Indonesia
-  defaultZoom: 5,
+  defaultCenter: [21.4735, 55.9754], // Oman
+  defaultZoom: 6,
   minZoom: 3,
   maxZoom: 18,
 };

@@ -7,11 +7,11 @@ export interface Country {
 }
 
 const DEFAULT_COUNTRIES = [
-  "Indonesia",
+  "Oman",
+  "United Arab Emirates",
+  "Saudi Arabia",
   "India",
-  "United Kingdom",
-  "Japan",
-  "Australia",
+  "Indonesia",
 ];
 
 let cache: FeatureCollection | null = null;
