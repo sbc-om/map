@@ -14,7 +14,7 @@ export const DEFAULT_MAP_CONFIG: MapConfig = {
   minZoom: 3,
   maxZoom: 18,
   zoomControl: false, // Using custom controls in dock
-  attributionControl: true,
+  attributionControl: false,
 };
 
 /**
