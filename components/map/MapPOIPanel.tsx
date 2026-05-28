@@ -12,8 +12,9 @@ import {
   Save,
   Edit2,
   MapPin,
-  XCircle,
+  Crosshair,
   Navigation2,
+  ChevronDown,
 } from "lucide-react";
 import { DirectionsView } from "./DirectionsView";
 import { Drawer } from "vaul";
@@ -23,8 +24,10 @@ import {
   POI_CATEGORIES,
   getCategoryColor,
   getCategoryBgColor,
+  getCategoryById,
 } from "@/constants/poi-categories";
 import { formatDecimalDegrees } from "@/lib/utils/coordinates";
+import { useLeafletMap } from "@/hooks/useLeafletMap";
 
 interface MapPOIPanelProps {
   isOpen: boolean;
@@ -185,6 +188,14 @@ export const MapPOIPanel = memo(function MapPOIPanel({
   const snapPoints = [0.4, 0.7, 1];
   const [snap, setSnap] = useState<number | string | null>(snapPoints[1]);
 
+  // ── Draggable preview marker ──────────────────────────────────────────────
+  const map = useLeafletMap();
+  const previewMarkerRef = useRef<any>(null);
+  const prevCategoryRef = useRef<string>("");
+  // Keep a stable ref to map for cleanup on unmount
+  const mapRef = useRef(map);
+  useEffect(() => { mapRef.current = map; }, [map]);
+
   // Detect mobile viewport
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -213,6 +224,28 @@ export const MapPOIPanel = memo(function MapPOIPanel({
     [externalMode, onModeChange]
   );
 
+  // Remove preview marker when leaving form mode
+  useEffect(() => {
+    const isFormMode = viewMode === "add" || viewMode === "edit";
+    if (!isFormMode) {
+      if (previewMarkerRef.current && mapRef.current) {
+        try { mapRef.current.removeLayer(previewMarkerRef.current); } catch {}
+        previewMarkerRef.current = null;
+        prevCategoryRef.current = "";
+      }
+    }
+  }, [viewMode]);
+
+  // Cleanup preview marker on unmount
+  useEffect(() => {
+    return () => {
+      if (previewMarkerRef.current && mapRef.current) {
+        try { mapRef.current.removeLayer(previewMarkerRef.current); } catch {}
+        previewMarkerRef.current = null;
+      }
+    };
+  }, []);
+
   // Initialize form data - derive from props when available
   const initialFormData = useMemo(
     () => ({
@@ -228,10 +261,8 @@ export const MapPOIPanel = memo(function MapPOIPanel({
   const [formData, setFormData] = useState<POIFormData>(initialFormData);
 
   // Update form coordinates when they change from parent
-  // This is a legitimate use of setState in effect for prop synchronization
   useEffect(() => {
     if (initialLatStr && initialLngStr) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFormData((prev) => ({
         ...prev,
         lat: initialLatStr,
@@ -239,6 +270,82 @@ export const MapPOIPanel = memo(function MapPOIPanel({
       }));
     }
   }, [initialLatStr, initialLngStr]);
+
+  // ── Draggable preview marker (position + category-aware) ──────────────────
+  useEffect(() => {
+    const isFormMode = viewMode === "add" || viewMode === "edit";
+    const lat = parseFloat(formData.lat);
+    const lng = parseFloat(formData.lng);
+    const hasCoords =
+      !isNaN(lat) && !isNaN(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+
+    if (!isFormMode || !hasCoords || !map) {
+      if (previewMarkerRef.current) {
+        try { map?.removeLayer(previewMarkerRef.current); } catch {}
+        previewMarkerRef.current = null;
+        prevCategoryRef.current = "";
+      }
+      return;
+    }
+
+    const categoryChanged = formData.category !== prevCategoryRef.current;
+
+    if (previewMarkerRef.current && !categoryChanged) {
+      // Just reposition — no flicker
+      previewMarkerRef.current.setLatLng([lat, lng]);
+      return;
+    }
+
+    // Remove stale marker before recreating
+    if (previewMarkerRef.current) {
+      try { map.removeLayer(previewMarkerRef.current); } catch {}
+      previewMarkerRef.current = null;
+    }
+    prevCategoryRef.current = formData.category;
+
+    const color = getCategoryColor(formData.category);
+    const cat = getCategoryById(formData.category);
+    const icon = cat?.icon ?? "📍";
+
+    import("leaflet").then((L) => {
+      if (!map) return;
+      const marker = L.marker([lat, lng], {
+        draggable: true,
+        zIndexOffset: 600,
+        icon: L.divIcon({
+          className: "",
+          html: `<div style="position:relative;width:36px;height:48px;filter:drop-shadow(0 3px 8px rgba(0,0,0,0.35))">
+  <div style="position:absolute;top:0;left:0;right:0;height:36px;background:${color};border:3px solid white;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center">
+    <span style="transform:rotate(45deg);font-size:14px;line-height:1">${icon}</span>
+  </div>
+  <div style="position:absolute;bottom:4px;left:50%;transform:translateX(-50%);width:6px;height:6px;background:${color};border-radius:50%;opacity:0.5"></div>
+</div>`,
+          iconSize: [36, 48],
+          iconAnchor: [18, 48],
+          popupAnchor: [0, -50],
+        }),
+      }).addTo(map);
+
+      // Tooltip hint
+      marker.bindTooltip("Drag to reposition", {
+        direction: "top",
+        offset: [0, -50],
+        className: "leaflet-tooltip-drag",
+      });
+
+      marker.on("dragend", function (this: typeof marker) {
+        const pos = this.getLatLng();
+        setFormData((prev) => ({
+          ...prev,
+          lat: pos.lat.toFixed(6),
+          lng: pos.lng.toFixed(6),
+        }));
+      });
+
+      previewMarkerRef.current = marker;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, viewMode, formData.lat, formData.lng, formData.category]);
 
   // Filter POIs by category if specified
   const displayPOIs = filterCategory
@@ -255,14 +362,24 @@ export const MapPOIPanel = memo(function MapPOIPanel({
   const handleAddMode = useCallback(() => {
     setViewMode("add");
     setEditingPOI(null);
+
+    // Auto-place pin at current map center if no external coords
+    let lat = initialLatStr;
+    let lng = initialLngStr;
+    if (!lat && !lng && map) {
+      const center = map.getCenter();
+      lat = center.lat.toFixed(6);
+      lng = center.lng.toFixed(6);
+    }
+
     setFormData({
       title: "",
       description: "",
-      lat: initialLatStr,
-      lng: initialLngStr,
+      lat,
+      lng,
       category: filterCategory || "food-drink",
     });
-  }, [setViewMode, initialLatStr, initialLngStr, filterCategory]);
+  }, [setViewMode, initialLatStr, initialLngStr, filterCategory, map]);
 
   /**
    * Handle edit POI mode
@@ -421,69 +538,106 @@ export const MapPOIPanel = memo(function MapPOIPanel({
     if (viewMode === "add" || viewMode === "edit") {
       return (
         <div className="flex-1 overflow-y-auto bg-white dark:bg-gray-900 scrollbar-thin px-6 py-4">
-          {/* Coordinates Section */}
+          {/* Location Section */}
           <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Coordinates
-            </label>
-            {formData.lat && formData.lng && !isSelectingLocationProp ? (
-              <div className="flex gap-2">
-                <div className="flex-1 grid grid-cols-2 gap-3">
-                  <input
-                    type="text"
-                    value={formData.lat}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, lat: e.target.value }))
-                    }
-                    placeholder="Latitude"
-                    className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
-                  />
-                  <input
-                    type="text"
-                    value={formData.lng}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, lng: e.target.value }))
-                    }
-                    placeholder="Longitude"
-                    className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
-                  />
-                </div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Location
+              </label>
+              {map && formData.lat && formData.lng && (
                 <button
-                  onClick={handleClearCoordinates}
-                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                  title="Clear coordinates"
+                  type="button"
+                  onClick={() => {
+                    const center = map.getCenter();
+                    setFormData((prev) => ({
+                      ...prev,
+                      lat: center.lat.toFixed(6),
+                      lng: center.lng.toFixed(6),
+                    }));
+                  }}
+                  className="flex items-center gap-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
+                  title="Move pin to current map center"
                 >
-                  <XCircle className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+                  <Crosshair className="h-3.5 w-3.5" />
+                  Re-center
                 </button>
-              </div>
-            ) : (
-              <div>
-                <button
-                  onClick={handleToggleLocationSelection}
-                  className={`w-full px-4 py-3 border-2 border-dashed rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
-                    isSelectingLocationProp
-                      ? "border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 shadow-sm"
-                      : "border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/10"
-                  }`}
-                >
-                  <MapPin
-                    className={`h-4 w-4 ${
-                      isSelectingLocationProp ? "animate-pulse" : ""
-                    }`}
-                  />
-                  {isSelectingLocationProp
-                    ? "Click on map to select location"
-                    : "Click to select location on map"}
-                </button>
-                {isSelectingLocationProp && cursorLat && cursorLng && (
-                  <div className="mt-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                    <div className="text-xs text-blue-600 dark:text-blue-400 font-mono">
+              )}
+            </div>
+
+            {/* Status banner */}
+            {isSelectingLocationProp ? (
+              <div className="flex items-start gap-2.5 px-3 py-2.5 mb-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50">
+                <MapPin className="h-4 w-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5 animate-pulse" />
+                <div>
+                  <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">
+                    Click anywhere on the map to place the pin
+                  </p>
+                  {cursorLat && cursorLng && (
+                    <p className="text-[11px] font-mono text-amber-600/70 dark:text-amber-400/70 mt-0.5">
                       {cursorLat.toFixed(6)}, {cursorLng.toFixed(6)}
-                    </div>
-                  </div>
-                )}
+                    </p>
+                  )}
+                </div>
               </div>
-            )}
+            ) : formData.lat && formData.lng ? (
+              <div className="flex items-center gap-2.5 px-3 py-2.5 mb-3 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-100 dark:border-blue-900/40">
+                <div className="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0 shadow-sm">
+                  <MapPin className="h-3 w-3 text-white" />
+                </div>
+                <p className="text-xs font-medium text-blue-700 dark:text-blue-300 leading-snug">
+                  Pin placed —{" "}
+                  <span className="text-blue-500 dark:text-blue-400">drag it on the map to refine</span>
+                </p>
+              </div>
+            ) : null}
+
+            {/* Coordinate inputs */}
+            <div className="grid grid-cols-2 gap-2 mb-2.5">
+              <div>
+                <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">
+                  Latitude
+                </p>
+                <input
+                  type="text"
+                  value={formData.lat}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, lat: e.target.value }))
+                  }
+                  placeholder="e.g. 23.5882"
+                  className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm font-mono placeholder:font-sans placeholder:text-gray-300 dark:placeholder:text-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                />
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">
+                  Longitude
+                </p>
+                <input
+                  type="text"
+                  value={formData.lng}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, lng: e.target.value }))
+                  }
+                  placeholder="e.g. 58.3823"
+                  className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm font-mono placeholder:font-sans placeholder:text-gray-300 dark:placeholder:text-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                />
+              </div>
+            </div>
+
+            {/* Pick from map */}
+            <button
+              type="button"
+              onClick={handleToggleLocationSelection}
+              className={`w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl border text-xs font-medium transition-all ${
+                isSelectingLocationProp
+                  ? "border-amber-400 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300"
+                  : "border-dashed border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-blue-400 dark:hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400"
+              }`}
+            >
+              <Crosshair className="h-3.5 w-3.5" />
+              {isSelectingLocationProp
+                ? "Click on the map to place pin…"
+                : "Pick location by clicking on map"}
+            </button>
           </div>
 
           {/* Category Selection */}
@@ -491,22 +645,12 @@ export const MapPOIPanel = memo(function MapPOIPanel({
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Category
             </label>
-            <select
+            <CategorySelect
               value={formData.category}
-              onChange={(e) =>
-                setFormData((prev) => ({
-                  ...prev,
-                  category: e.target.value as POICategory,
-                }))
+              onChange={(cat) =>
+                setFormData((prev) => ({ ...prev, category: cat }))
               }
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
-            >
-              {POI_CATEGORIES.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.icon} {cat.name}
-                </option>
-              ))}
-            </select>
+            />
           </div>
 
           {/* Title Input */}
@@ -794,3 +938,93 @@ export const MapPOIPanel = memo(function MapPOIPanel({
 });
 
 MapPOIPanel.displayName = "MapPOIPanel";
+
+// ─── CategorySelect ───────────────────────────────────────────────────────────
+
+function CategorySelect({
+  value,
+  onChange,
+}: {
+  value: POICategory;
+  onChange: (cat: POICategory) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const selected = getCategoryById(value);
+
+  useEffect(() => {
+    if (!open) return;
+    const handle = (e: MouseEvent | TouchEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handle);
+    document.addEventListener("touchstart", handle);
+    return () => {
+      document.removeEventListener("mousedown", handle);
+      document.removeEventListener("touchstart", handle);
+    };
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      {/* Trigger */}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
+      >
+        <span
+          className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-base"
+          style={{ backgroundColor: selected?.bgColor }}
+        >
+          {selected?.icon}
+        </span>
+        <span className="flex-1 text-left text-sm font-medium text-gray-900 dark:text-white">
+          {selected?.name}
+        </span>
+        <div
+          className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+          style={{ backgroundColor: selected?.color }}
+        />
+        <ChevronDown
+          className={`h-4 w-4 text-gray-400 flex-shrink-0 transition-transform duration-150 ${
+            open ? "rotate-180" : ""
+          }`}
+        />
+      </button>
+
+      {/* Dropdown */}
+      {open && (
+        <div className="absolute top-full left-0 right-0 mt-1.5 z-[70] bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-800 overflow-hidden">
+          <div className="grid grid-cols-4 gap-1 p-2 max-h-56 overflow-y-auto">
+            {POI_CATEGORIES.map((cat) => (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => {
+                  onChange(cat.id);
+                  setOpen(false);
+                }}
+                className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all active:scale-95 ${
+                  value === cat.id
+                    ? "ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900/30"
+                    : "hover:bg-gray-50 dark:hover:bg-gray-800"
+                }`}
+              >
+                <span
+                  className="w-9 h-9 rounded-full flex items-center justify-center text-lg"
+                  style={{ backgroundColor: cat.bgColor }}
+                >
+                  {cat.icon}
+                </span>
+                <span className="text-[10px] font-medium text-gray-600 dark:text-gray-400 leading-tight text-center line-clamp-1">
+                  {cat.name.split(" ")[0]}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
