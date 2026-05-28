@@ -318,7 +318,6 @@ export function MapMain() {
       {/* ── Controls ── */}
       <MapControls />
 
-
       {/* ── Details Panel ── */}
       <MapDetailsPanel
         country={selectedCountry}
