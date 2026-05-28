@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useCallback, useEffect, useRef, useState, useMemo } from "react";
-import { Copy, MapPin, Ruler, Check, Star, Navigation2 } from "lucide-react";
+import { Copy, MapPin, Ruler, Check, Star, Navigation2, Share2 } from "lucide-react";
 import { formatDecimalDegrees } from "@/lib/utils/coordinates";
 import type { ContextMenuPosition } from "@/hooks/useMapContextMenu";
 
@@ -13,6 +13,7 @@ interface MapContextMenuProps {
   onStartMeasurement: () => void;
   onAddPOI?: (lat: number, lng: number) => void;
   onDirections?: (lat: number, lng: number) => void;
+  onShareLocation?: (lat: number, lng: number) => void;
 }
 
 interface MenuItemProps {
@@ -59,7 +60,7 @@ MenuItem.displayName = "MenuItem";
 
 // Menu dimensions for position calculation (approximate)
 const MENU_WIDTH = 220;
-const MENU_HEIGHT = 180;
+const MENU_HEIGHT = 220;
 const MENU_PADDING = 8;
 
 /**
@@ -81,10 +82,11 @@ export const MapContextMenu = memo(function MapContextMenu({
   onStartMeasurement,
   onAddPOI,
   onDirections,
+  onShareLocation,
 }: MapContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
-  // Track which position was copied (null means not copied)
   const [copiedPosition, setCopiedPosition] = useState<string | null>(null);
+  const [sharedPosition, setSharedPosition] = useState<string | null>(null);
 
   // Format coordinates for display
   const coordsText = useMemo(() => {
@@ -92,9 +94,9 @@ export const MapContextMenu = memo(function MapContextMenu({
     return formatDecimalDegrees([position.latlng.lat, position.latlng.lng], 6);
   }, [position]);
 
-  // Derive copied state from position comparison
   const positionKey = position ? `${position.x}-${position.y}` : null;
   const copied = copiedPosition === positionKey;
+  const shared = sharedPosition === positionKey;
 
   // Calculate adjusted position using useMemo instead of useEffect + setState
   const displayPosition = useMemo(() => {
@@ -178,6 +180,19 @@ export const MapContextMenu = memo(function MapContextMenu({
   }, [onStartMeasurement, onClose]);
 
   /**
+   * Share location link
+   */
+  const handleShareLocation = useCallback(async () => {
+    if (!position || !positionKey || !onShareLocation) return;
+    onShareLocation(position.latlng.lat, position.latlng.lng);
+    setSharedPosition(positionKey);
+    setTimeout(() => {
+      setSharedPosition(null);
+      onClose();
+    }, 1500);
+  }, [position, positionKey, onShareLocation, onClose]);
+
+  /**
    * Handle add to POI
    */
   const handleAddPOI = useCallback(() => {
@@ -233,7 +248,7 @@ export const MapContextMenu = memo(function MapContextMenu({
       role="menu"
       aria-label="Map context menu"
     >
-      {/* Coordinates */}
+      {/* Copy Coordinates */}
       <MenuItem
         icon={<Copy className="h-4 w-4" />}
         label="Copy Coordinates"
@@ -241,6 +256,17 @@ export const MapContextMenu = memo(function MapContextMenu({
         onClick={handleCopyCoordinates}
         showCopied={copied}
       />
+
+      {/* Share Location */}
+      {onShareLocation && (
+        <MenuItem
+          icon={<Share2 className="h-4 w-4" />}
+          label="Share Location"
+          sublabel="Copy shareable link"
+          onClick={handleShareLocation}
+          showCopied={shared}
+        />
+      )}
 
       {/* Divider */}
       <div className="my-1.5 border-t border-gray-200 dark:border-gray-700" />

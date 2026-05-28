@@ -81,7 +81,6 @@ export function usePOIManager() {
             border: 3px solid white;
             border-radius: 50% 50% 50% 0;
             transform: rotate(-45deg);
-            box-shadow: 0 3px 8px rgba(0,0,0,0.3);
             display: flex;
             align-items: center;
             justify-content: center;

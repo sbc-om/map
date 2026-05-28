@@ -129,6 +129,27 @@ export function MapMain() {
     (lat: number, lng: number) => addMarker(lat, lng),
     [addMarker]
   );
+
+  const handleShareLocation = useCallback(
+    async (lat: number, lng: number) => {
+      const zoom = map?.getZoom() ?? 15;
+      const params = new URLSearchParams({
+        lat: lat.toFixed(6),
+        lng: lng.toFixed(6),
+        zoom: String(Math.round(zoom)),
+        pin: "1",
+      });
+      const url = `${window.location.origin}/map?${params}`;
+      try {
+        if (navigator.share) {
+          await navigator.share({ title: "Location on Map", text: `${lat.toFixed(6)}, ${lng.toFixed(6)}`, url });
+        } else {
+          await navigator.clipboard.writeText(url);
+        }
+      } catch { /* user cancelled */ }
+    },
+    [map]
+  );
   const handleContextMenuMeasurement = useCallback(
     () => setIsMeasurementOpen(true),
     []
@@ -319,6 +340,7 @@ export function MapMain() {
         onStartMeasurement={handleContextMenuMeasurement}
         onAddPOI={handleContextMenuAddPOI}
         onDirections={handleContextMenuDirections}
+        onShareLocation={handleShareLocation}
       />
 
       {/* ── POI + Directions Panel (unified sidebar) ── */}

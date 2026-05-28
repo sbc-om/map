@@ -344,8 +344,7 @@ export const MapPOIPanel = memo(function MapPOIPanel({
           className: "poi-preview-marker",
           html: `<div style="position:relative;width:44px;height:60px;pointer-events:none">
   <div class="poi-pulse-ring" style="position:absolute;top:0;left:0;width:40px;height:40px;border-radius:50%;border:2px solid ${color}"></div>
-  <div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:12px;height:5px;background:rgba(0,0,0,0.2);border-radius:50%"></div>
-  <div style="position:absolute;top:4px;left:4px;width:32px;height:32px;background:${color};border:3px solid white;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,0.35)">
+  <div style="position:absolute;top:4px;left:4px;width:32px;height:32px;background:${color};border:3px solid white;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center">
     <span style="transform:rotate(45deg);font-size:14px;line-height:1">${icon}</span>
   </div>
 </div>`,
