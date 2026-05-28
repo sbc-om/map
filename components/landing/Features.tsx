@@ -9,7 +9,7 @@ const features = [
     glowColor: "group-hover:shadow-sky-500/15",
     title: "Multi-Layer Mapping",
     description:
-      "Switch seamlessly between standard, satellite, and dark map layers. Customize tile providers for any use case — from urban planning to field operations.",
+      "Switch seamlessly between standard, satellite, and dark map layers. Customize tile providers for any use case - from urban planning to field operations.",
     image: "/map-satellite.png",
     imageAlt: "Satellite map layer view",
   },
@@ -31,14 +31,14 @@ const features = [
     glowColor: "group-hover:shadow-emerald-500/15",
     title: "Advanced Navigation",
     description:
-      "GPS-powered live tracking, precision measurement tools, and contextual map controls — everything field teams need in one unified platform.",
+      "GPS-powered live tracking, precision measurement tools, and contextual map controls - everything field teams need in one unified platform.",
     image: "/map-dark.png",
     imageAlt: "Dark mode navigation interface",
   },
 ];
 
 /**
- * Features section — Server Component
+ * Features section - Server Component
  * Showcases the 3 core platform capabilities
  */
 export function Features() {

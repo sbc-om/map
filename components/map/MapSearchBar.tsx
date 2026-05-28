@@ -146,7 +146,7 @@ function parseCoordinates(
 // ─── Component ───────────────────────────────────────────────────────────────
 
 /**
- * MapSearchBar — full geocoding search powered by Nominatim.
+ * MapSearchBar - full geocoding search powered by Nominatim.
  *
  * Searches places, addresses, cities, POIs, landmarks globally.
  * Falls back to country list from lib/countries when needed.

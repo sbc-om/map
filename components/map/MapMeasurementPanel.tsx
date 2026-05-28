@@ -202,7 +202,7 @@ export function MapMeasurementPanel({
                         Distance
                       </p>
                       <p className="text-sm font-bold text-blue-900 dark:text-blue-100">
-                        {pointCount > 1 ? formatDistance(distance) : "—"}
+                        {pointCount > 1 ? formatDistance(distance) : "-"}
                       </p>
                     </div>
                   )}
@@ -213,7 +213,7 @@ export function MapMeasurementPanel({
                         Area
                       </p>
                       <p className="text-sm font-bold text-green-900 dark:text-green-100">
-                        {pointCount > 2 ? formatArea(area) : "—"}
+                        {pointCount > 2 ? formatArea(area) : "-"}
                       </p>
                     </div>
                   )}

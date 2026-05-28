@@ -57,7 +57,7 @@ interface DirectionsViewProps {
 }
 
 /**
- * DirectionsView — A→B routing form + results, content-only (no outer panel).
+ * DirectionsView - A→B routing form + results, content-only (no outer panel).
  * Designed to be rendered inside MapPOIPanel when mode === "directions".
  */
 export function DirectionsView({ initialTo = "" }: DirectionsViewProps) {

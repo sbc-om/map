@@ -3,7 +3,7 @@ import { Navbar } from "@/components/landing/Navbar";
 import { Hero } from "@/components/landing/Hero";
 
 /**
- * Landing page — Server Component
+ * Landing page - Server Component
  * Minimal single-screen design: background + navbar + hero CTAs
  */
 export default function Home() {

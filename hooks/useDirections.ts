@@ -66,7 +66,7 @@ export function formatDuration(seconds: number): string {
 // ─── Hook ────────────────────────────────────────────────────────────────────
 
 /**
- * useDirections — route from A → B using OSRM (free, no API key)
+ * useDirections - route from A → B using OSRM (free, no API key)
  *
  * Draws a styled polyline + start/end markers on the Leaflet map.
  */

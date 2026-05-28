@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowUpRight, Globe } from "lucide-react";
 
 /**
- * Hero — Server Component
+ * Hero - Server Component
  * Minimal: heading · one-liner · single CTA (Open Map)
  */
 export function Hero() {
@@ -23,7 +23,7 @@ export function Hero() {
         and precision geospatial tools.
       </p>
 
-      {/* CTA — Open Map only */}
+      {/* CTA - Open Map only */}
       <div className="animate-fadeInUp animation-delay-300 mt-10">
         <Link
           href="/map"

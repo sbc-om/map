@@ -284,6 +284,26 @@
   }
 }
 
+/* ── Draggable POI preview marker ─────────────────────────────────────────── */
+/*  .poi-preview-marker is placed on the Leaflet icon wrapper (via divIcon      */
+/*  className). touch-action:none is essential for mobile drag to work.         */
+.poi-preview-marker {
+  cursor: grab;
+  touch-action: none !important;
+}
+.poi-preview-marker:active {
+  cursor: grabbing;
+}
+@keyframes poi-pulse {
+  0%   { transform: scale(0.5); opacity: 0.75; }
+  80%  { transform: scale(2.6); opacity: 0; }
+  100% { transform: scale(0.5); opacity: 0; }
+}
+.poi-pulse-ring {
+  animation: poi-pulse 2s ease-out infinite;
+  pointer-events: none;
+}
+
 /* Custom thin scrollbar styles */
 @layer utilities {
   .scrollbar-thin {

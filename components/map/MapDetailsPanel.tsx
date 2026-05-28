@@ -281,7 +281,7 @@ export function MapDetailsPanel({ country, onClose }: MapDetailsPanelProps) {
         country ? "translate-x-0" : "-translate-x-full"
       }`}
     >
-      {/* Close Button — z-[60] so it stays above header image overlays (z-10/z-20) */}
+      {/* Close Button - z-[60] so it stays above header image overlays (z-10/z-20) */}
       <button
         onClick={onClose}
         className="absolute top-4 right-4 z-[60] p-2 rounded-full bg-white/90 dark:bg-gray-800/90 hover:bg-white dark:hover:bg-gray-800 shadow-lg transition-colors"

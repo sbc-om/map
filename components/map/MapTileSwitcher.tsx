@@ -28,7 +28,7 @@ interface MapTileSwitcherProps {
 }
 
 /**
- * MapTileSwitcher — compact pill trigger + floating 2-column style picker.
+ * MapTileSwitcher - compact pill trigger + floating 2-column style picker.
  *
  * - Click to open / click-outside to close (mobile-friendly)
  * - 2-column grid: preview image or gradient + name

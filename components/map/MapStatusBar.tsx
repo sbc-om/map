@@ -16,7 +16,7 @@ function toDMS(val: number, axis: "lat" | "lng"): string {
 }
 
 /**
- * MapStatusBar — professional coordinate/zoom display at the very bottom.
+ * MapStatusBar - professional coordinate/zoom display at the very bottom.
  * Non-interactive (pointer-events-none), no layout impact on other controls.
  */
 export const MapStatusBar = memo(function MapStatusBar() {

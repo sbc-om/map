@@ -15,7 +15,7 @@ function GithubSvg({ className }: { className?: string }) {
 }
 
 /**
- * Footer — Server Component
+ * Footer - Server Component
  */
 export function Footer() {
   return (

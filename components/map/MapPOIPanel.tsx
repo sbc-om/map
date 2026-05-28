@@ -15,6 +15,7 @@ import {
   Crosshair,
   Navigation2,
   ChevronDown,
+  Share2,
 } from "lucide-react";
 import { DirectionsView } from "./DirectionsView";
 import { Drawer } from "vaul";
@@ -117,7 +118,7 @@ const POIListItem = memo(function POIListItem({
         </div>
       </button>
 
-      {/* Actions (show on hover) - Separate buttons, not nested */}
+      {/* Actions (show on hover) */}
       {isHovered && (
         <div className="flex items-center gap-1 flex-shrink-0">
           <button
@@ -129,6 +130,31 @@ const POIListItem = memo(function POIListItem({
             title="Edit"
           >
             <Edit2 className="h-4 w-4 text-gray-600 dark:text-gray-300" />
+          </button>
+          <button
+            onClick={async (e) => {
+              e.stopPropagation();
+              const params = new URLSearchParams({
+                lat: poi.lat.toFixed(6),
+                lng: poi.lng.toFixed(6),
+                zoom: "15",
+                pin: "1",
+                title: poi.title,
+              });
+              const url = `${window.location.origin}/map?${params}`;
+              try {
+                if (navigator.share) {
+                  await navigator.share({ title: poi.title, text: poi.description, url });
+                } else {
+                  await navigator.clipboard.writeText(url);
+                  toast.success("Location link copied!");
+                }
+              } catch { /* user cancelled */ }
+            }}
+            className="p-1.5 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+            title="Share location"
+          >
+            <Share2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
           </button>
           <button
             onClick={(e) => {
@@ -291,7 +317,7 @@ export const MapPOIPanel = memo(function MapPOIPanel({
     const categoryChanged = formData.category !== prevCategoryRef.current;
 
     if (previewMarkerRef.current && !categoryChanged) {
-      // Just reposition — no flicker
+      // Just reposition - no flicker
       previewMarkerRef.current.setLatLng([lat, lng]);
       return;
     }
@@ -313,25 +339,24 @@ export const MapPOIPanel = memo(function MapPOIPanel({
         draggable: true,
         zIndexOffset: 600,
         icon: L.divIcon({
-          className: "",
-          html: `<div style="position:relative;width:36px;height:48px;filter:drop-shadow(0 3px 8px rgba(0,0,0,0.35))">
-  <div style="position:absolute;top:0;left:0;right:0;height:36px;background:${color};border:3px solid white;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center">
+          // poi-preview-marker → sets touch-action:none + grab cursor on the
+          // Leaflet icon wrapper so mobile drag works and desktop shows grab cursor
+          className: "poi-preview-marker",
+          html: `<div style="position:relative;width:44px;height:60px;pointer-events:none">
+  <div class="poi-pulse-ring" style="position:absolute;top:0;left:0;width:40px;height:40px;border-radius:50%;border:2px solid ${color}"></div>
+  <div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:12px;height:5px;background:rgba(0,0,0,0.2);border-radius:50%"></div>
+  <div style="position:absolute;top:4px;left:4px;width:32px;height:32px;background:${color};border:3px solid white;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,0.35)">
     <span style="transform:rotate(45deg);font-size:14px;line-height:1">${icon}</span>
   </div>
-  <div style="position:absolute;bottom:4px;left:50%;transform:translateX(-50%);width:6px;height:6px;background:${color};border-radius:50%;opacity:0.5"></div>
 </div>`,
-          iconSize: [36, 48],
-          iconAnchor: [18, 48],
-          popupAnchor: [0, -50],
+          iconSize: [44, 60],
+          iconAnchor: [22, 60],
+          popupAnchor: [0, -64],
         }),
       }).addTo(map);
 
-      // Tooltip hint
-      marker.bindTooltip("Drag to reposition", {
-        direction: "top",
-        offset: [0, -50],
-        className: "leaflet-tooltip-drag",
-      });
+      // Explicit enable - belt-and-suspenders for mobile reliability
+      marker.dragging?.enable();
 
       marker.on("dragend", function (this: typeof marker) {
         const pos = this.getLatLng();
@@ -585,8 +610,8 @@ export const MapPOIPanel = memo(function MapPOIPanel({
                   <MapPin className="h-3 w-3 text-white" />
                 </div>
                 <p className="text-xs font-medium text-blue-700 dark:text-blue-300 leading-snug">
-                  Pin placed —{" "}
-                  <span className="text-blue-500 dark:text-blue-400">drag it on the map to refine</span>
+                  Pin placed.{" "}
+                  <span className="text-blue-500 dark:text-blue-400">Drag it on the map to refine</span>
                 </p>
               </div>
             ) : null}
@@ -921,7 +946,7 @@ export const MapPOIPanel = memo(function MapPOIPanel({
         isOpen ? "translate-x-0" : "-translate-x-full"
       }`}
     >
-      {/* Close Button — z-[60] so it stays above header image overlays (z-10/z-20) */}
+      {/* Close Button - z-[60] so it stays above header image overlays (z-10/z-20) */}
       <button
         onClick={() => {
           onClose();

@@ -62,7 +62,7 @@ interface MapDirectionsPanelProps {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 /**
- * MapDirectionsPanel — slide-in panel for A→B routing via OSRM.
+ * MapDirectionsPanel - slide-in panel for A→B routing via OSRM.
  *
  * Features:
  * - Nominatim geocoding for both endpoints

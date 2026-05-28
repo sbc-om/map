@@ -30,7 +30,7 @@ const GEOJSON_STYLE = {
 } as const;
 
 /**
- * MapMain — root map component.
+ * MapMain - root map component.
  *
  * New features vs previous version:
  * - MapDirectionsPanel (OSRM routing)
@@ -69,19 +69,27 @@ export function MapMain() {
   const { pois, addPOI, updatePOI, deletePOI, clearAllPOIs, exportGeoJSON, importGeoJSON, flyToPOI } =
     usePOIManager();
 
-  // ── Deep-link: fly to ?lat=&lng=&zoom= on mount ────────────────────────────
+  // Deep-link: fly to ?lat=&lng=&zoom= on mount, show pin if &pin=1
   useEffect(() => {
     if (!map) return;
     const params = new URLSearchParams(window.location.search);
     const lat = parseFloat(params.get("lat") ?? "");
     const lng = parseFloat(params.get("lng") ?? "");
     const zoom = parseInt(params.get("zoom") ?? "", 10);
+    const showPin = params.get("pin") === "1";
+    const title = params.get("title") ? decodeURIComponent(params.get("title")!) : undefined;
+
     if (!isNaN(lat) && !isNaN(lng)) {
-      map.flyTo([lat, lng], !isNaN(zoom) ? zoom : 13, {
+      map.flyTo([lat, lng], !isNaN(zoom) ? zoom : 15, {
         animate: true,
         duration: 1.5,
       });
+      if (showPin) {
+        addMarker(lat, lng, title);
+      }
     }
+  // addMarker is stable (useCallback); including it satisfies exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map]);
 
   // ── Callbacks ──────────────────────────────────────────────────────────────
@@ -107,7 +115,7 @@ export function MapMain() {
     []
   );
 
-  // Directions — now shown inside the POI sidebar as mode='directions'
+  // Directions - now shown inside the POI sidebar as mode='directions'
   const handleDirectionsOpen = useCallback((to = "") => {
     setDirectionsInitialTo(to);
     setPOIPanelMode("directions");

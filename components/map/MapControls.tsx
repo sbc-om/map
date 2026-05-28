@@ -7,7 +7,7 @@ import { useGeolocation } from "@/hooks/useGeolocation";
 import { toast } from "sonner";
 
 /**
- * MapControls — right-side control dock.
+ * MapControls - right-side control dock.
  *
  * Layout (bottom → top):
  *   Fullscreen · Share · Compass · [Zoom+/−] · Locate

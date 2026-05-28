@@ -10,7 +10,7 @@ function GithubSvg({ className }: { className?: string }) {
 }
 
 /**
- * Navbar — Server Component
+ * Navbar - Server Component
  * Logo left · GitHub button right
  */
 export function Navbar() {

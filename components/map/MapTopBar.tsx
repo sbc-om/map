@@ -5,7 +5,7 @@ import { MapThemeSwitcher } from "./MapThemeSwitcher";
 import { MapUser } from "./MapUser";
 
 /**
- * MapTopBar — minimal top-right controls (theme switcher + user avatar).
+ * MapTopBar - minimal top-right controls (theme switcher + user avatar).
  * Category quick-access chips have moved into MapSearchBar.
  */
 export const MapTopBar = memo(function MapTopBar() {

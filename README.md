@@ -15,35 +15,35 @@ A production-ready Next.js 16 starter template with vanilla Leaflet integration.
 
 ### Core Map Features
 
-- **Modern Map Interface** — Google Maps-inspired UI with smooth animations
-- **Multiple Tile Providers** — OpenStreetMap, Satellite (Esri), and Dark mode (CARTO)
-- **Theme-Aware Basemaps** — Auto-switches map style based on light/dark theme
-- **GeoJSON Support** — Render and style geographic features with fly-to animations
-- **Country Search** — Debounced search with keyboard navigation (↑↓ Enter Esc)
-- **Map Controls** — Zoom, fullscreen, geolocation, and reset view
-- **Responsive Design** — Mobile-first approach with adaptive layouts
-- **Server Components** — Next.js 16 App Router with optimized client boundaries
+- **Modern Map Interface**: Google Maps-inspired UI with smooth animations
+- **Multiple Tile Providers**: OpenStreetMap, Satellite (Esri), and Dark mode (CARTO)
+- **Theme-Aware Basemaps**: Auto-switches map style based on light/dark theme
+- **GeoJSON Support**: Render and style geographic features with fly-to animations
+- **Country Search**: Debounced search with keyboard navigation (↑↓ Enter Esc)
+- **Map Controls**: Zoom, fullscreen, geolocation, and reset view
+- **Responsive Design**: Mobile-first approach with adaptive layouts
+- **Server Components**: Next.js 16 App Router with optimized client boundaries
 
 ### 🆕 POI (Point of Interest) Management
 
-- **Full CRUD Operations** — Create, read, update, and delete custom places
-- **14 Category Types** — Food & Drink, Shopping, Transport, Lodging, Health, Entertainment, Nature, Services, Education, Religion, Business, Tourism, Emergency, Utilities
-- **Interactive Location Picker** — Click-to-select with live cursor tracking and crosshair cursor
-- **LocalStorage Persistence** — Your places are saved automatically
-- **GeoJSON Import/Export** — Share and backup your places
-- **Category Filtering** — Filter places by category with color-coded markers
-- **Fly-to Animation** — Smooth navigation to any saved place
-- **Mobile-Optimized** — Drawer UI on mobile, side panel on desktop
-- **Toast Notifications** — Beautiful, colorful feedback for all actions
+- **Full CRUD Operations**: Create, read, update, and delete custom places
+- **14 Category Types**: Food & Drink, Shopping, Transport, Lodging, Health, Entertainment, Nature, Services, Education, Religion, Business, Tourism, Emergency, Utilities
+- **Interactive Location Picker**: Click-to-select with live cursor tracking and crosshair cursor
+- **LocalStorage Persistence**: Your places are saved automatically
+- **GeoJSON Import/Export**: Share and backup your places
+- **Category Filtering**: Filter places by category with color-coded markers
+- **Fly-to Animation**: Smooth navigation to any saved place
+- **Mobile-Optimized**: Drawer UI on mobile, side panel on desktop
+- **Toast Notifications**: Beautiful, colorful feedback for all actions
 
 ### 🎯 Advanced Features
 
-- **Context Menu** — Right-click for quick actions (copy coordinates, add marker, measure, save place)
-- **Measurement Tools** — Distance and area measurement with interactive drawing
-- **User Markers** — Add custom markers anywhere on the map
-- **Real-time Coordinate Display** — Live lat/lng tracking when selecting locations
-- **Dark Mode Support** — Seamless theme switching with persistent preferences
-- **Error Boundaries** — Graceful error handling with fallback UI
+- **Context Menu**: Right-click for quick actions (copy coordinates, add marker, measure, save place)
+- **Measurement Tools**: Distance and area measurement with interactive drawing
+- **User Markers**: Add custom markers anywhere on the map
+- **Real-time Coordinate Display**: Live lat/lng tracking when selecting locations
+- **Dark Mode Support**: Seamless theme switching with persistent preferences
+- **Error Boundaries**: Graceful error handling with fallback UI
 
 ## 🛠 Tech Stack
 
@@ -193,4 +193,4 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## 📄 License
 
-MIT License — feel free to use this starter for personal or commercial projects.
+MIT License: feel free to use this starter for personal or commercial projects.
