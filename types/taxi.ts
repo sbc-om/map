@@ -95,6 +95,8 @@ export interface RideRequest {
   driverName: string | null;
   vehicleType: VehicleType | null;
   vehicleNumber: string | null;
+  /** When a driver accepted the ride (used for the approach ETA countdown) */
+  acceptedAt?: number;
   createdAt: number;
   updatedAt: number;
 }

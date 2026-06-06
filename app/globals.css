@@ -304,6 +304,22 @@
   pointer-events: none;
 }
 
+/* ── Taxi car markers ─────────────────────────────────────────────────────── */
+/*  Smoothly animate position changes so live driver movement glides instead of */
+/*  jumping between GPS updates. The transition is skipped during map zoom so    */
+/*  markers stay anchored to their coordinates.                                  */
+.taxi-car-marker {
+  transition: transform 1s linear;
+}
+.leaflet-zoom-anim .taxi-car-marker {
+  transition: none;
+}
+.taxi-car-marker.leaflet-drag-target,
+.taxi-car-marker:active {
+  transition: none;
+  cursor: grabbing;
+}
+
 /* Custom thin scrollbar styles */
 @layer utilities {
   .scrollbar-thin {

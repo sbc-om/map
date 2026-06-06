@@ -38,15 +38,15 @@ function pinIcon(L: LType, color: string, glyph: string) {
 
 function carIcon(L: LType) {
   return L.divIcon({
-    className: "",
+    className: "taxi-car-marker",
     html: `<div style="
       display:flex;align-items:center;justify-content:center;
-      width:30px;height:30px;border-radius:8px;
-      background:#0f172a;border:2px solid #fbbf24;
-      box-shadow:0 2px 8px rgba(0,0,0,0.45);font-size:15px;line-height:1;
+      width:44px;height:44px;
+      font-size:34px;line-height:1;
+      filter:drop-shadow(0 2px 4px rgba(0,0,0,0.55));
     ">🚕</div>`,
-    iconSize: [30, 30],
-    iconAnchor: [15, 15],
+    iconSize: [44, 44],
+    iconAnchor: [22, 22],
   });
 }
 
@@ -58,6 +58,7 @@ export function useTaxiMap() {
   const destRef = useRef<Marker | null>(null);
   const routeRef = useRef<LayerGroup | null>(null);
   const driversRef = useRef<Map<string, Marker>>(new Map());
+  const selfRef = useRef<Marker | null>(null);
 
   const ensureL = useCallback(async (): Promise<LType | null> => {
     if (lRef.current) return lRef.current;
@@ -190,6 +191,45 @@ export function useTaxiMap() {
     [ensureL, map]
   );
 
+  /**
+   * The driver's own car marker. Optionally draggable so the driver can set or
+   * fine-tune their position by hand; updates in place to keep movement smooth.
+   */
+  const setSelfDriver = useCallback(
+    async (
+      point: LatLng | null,
+      opts?: { draggable?: boolean; onDragEnd?: (p: LatLng) => void }
+    ) => {
+      const L = await ensureL();
+      if (!map || !L) return;
+      if (!point) {
+        selfRef.current?.remove();
+        selfRef.current = null;
+        return;
+      }
+      const existing = selfRef.current;
+      if (existing) {
+        existing.setLatLng([point.lat, point.lng]);
+        if (opts?.draggable) existing.dragging?.enable();
+        else existing.dragging?.disable();
+        return;
+      }
+      const marker = L.marker([point.lat, point.lng], {
+        icon: carIcon(L),
+        draggable: opts?.draggable ?? false,
+        zIndexOffset: 1000,
+      }).addTo(map);
+      if (opts?.draggable && opts.onDragEnd) {
+        marker.on("dragend", () => {
+          const ll = marker.getLatLng();
+          opts.onDragEnd?.({ lat: ll.lat, lng: ll.lng });
+        });
+      }
+      selfRef.current = marker;
+    },
+    [ensureL, map]
+  );
+
   const clearAll = useCallback(() => {
     pickupRef.current?.remove();
     destRef.current?.remove();
@@ -197,6 +237,8 @@ export function useTaxiMap() {
     pickupRef.current = null;
     destRef.current = null;
     routeRef.current = null;
+    selfRef.current?.remove();
+    selfRef.current = null;
     driversRef.current.forEach((m) => m.remove());
     driversRef.current.clear();
   }, []);
@@ -215,8 +257,9 @@ export function useTaxiMap() {
       setDestination,
       drawRoute,
       setDrivers,
+      setSelfDriver,
       clearAll,
     }),
-    [map, flyTo, setPickup, setDestination, drawRoute, setDrivers, clearAll]
+    [map, flyTo, setPickup, setDestination, drawRoute, setDrivers, setSelfDriver, clearAll]
   );
 }

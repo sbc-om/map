@@ -4,6 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { LeafletMap } from "@/components/map/LeafletMap";
 import { LeafletTileLayer } from "@/components/map/LeafletTileLayer";
 import { useMapTileProvider } from "@/hooks/useMapTileProvider";
+import { useLeafletMap } from "@/hooks/useLeafletMap";
+import { useRealtimeStatus } from "@/hooks/useTaxiStore";
+import { initRealtime } from "@/lib/taxi/realtime";
 import { TaxiModeSelect } from "./TaxiModeSelect";
 import { PassengerFlow } from "./PassengerFlow";
 import { DriverFlow } from "./DriverFlow";
@@ -29,6 +32,14 @@ export function TaxiMain({ initialMode = null }: TaxiMainProps) {
   const [mode, setMode] = useState<TaxiMode | null>(initialMode);
   const [picking, setPicking] = useState(false);
   const { tileProvider } = useMapTileProvider();
+  const map = useLeafletMap();
+  const realtimeStatus = useRealtimeStatus();
+
+  // Connect the cross-device realtime transport (Ably) once on mount. No-op
+  // when NEXT_PUBLIC_ABLY_KEY is unset (falls back to same-browser sync).
+  useEffect(() => {
+    void initRealtime();
+  }, []);
 
   // Preselect the role from the URL after mount (avoids hydration mismatch
   // since the page is statically prerendered with no mode).
@@ -45,15 +56,26 @@ export function TaxiMain({ initialMode = null }: TaxiMainProps) {
   const clickHandlerRef = useRef<((lat: number, lng: number) => void) | null>(
     null
   );
-  const handleMapClick = useCallback((lat: number, lng: number) => {
-    clickHandlerRef.current?.(lat, lng);
-  }, []);
   const registerMapClick = useCallback(
     (handler: ((lat: number, lng: number) => void) | null) => {
       clickHandlerRef.current = handler;
     },
     []
   );
+
+  // Bind the click listener directly to the map instance once it is ready.
+  // (LeafletMap initialises asynchronously, so attaching via its onClick prop
+  // can miss the map; binding here re-runs reliably when `map` becomes available.)
+  useEffect(() => {
+    if (!map) return;
+    const handler = (e: { latlng: { lat: number; lng: number } }) => {
+      clickHandlerRef.current?.(e.latlng.lat, e.latlng.lng);
+    };
+    map.on("click", handler);
+    return () => {
+      map.off("click", handler);
+    };
+  }, [map]);
 
   const exitToSelect = useCallback(() => setMode(null), []);
 
@@ -63,7 +85,6 @@ export function TaxiMain({ initialMode = null }: TaxiMainProps) {
         className="h-full w-full"
         center={DEFAULT_PICKUP}
         zoom={13}
-        onClick={handleMapClick}
         cursorStyle={picking ? "crosshair" : "grab"}
       >
         <LeafletTileLayer
@@ -81,7 +102,42 @@ export function TaxiMain({ initialMode = null }: TaxiMainProps) {
           onPickModeChange={setPicking}
         />
       )}
-      {mode === "driver" && <DriverFlow onExit={exitToSelect} />}
+      {mode === "driver" && (
+        <DriverFlow
+          onExit={exitToSelect}
+          registerMapClick={registerMapClick}
+          onPickModeChange={setPicking}
+        />
+      )}
+
+      {mode !== null && realtimeStatus !== "disabled" && (
+        <div className="pointer-events-none absolute right-3 top-3 z-[1000]">
+          <span
+            className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold backdrop-blur ${
+              realtimeStatus === "connected"
+                ? "bg-emerald-500/15 text-emerald-300"
+                : realtimeStatus === "failed"
+                  ? "bg-red-500/15 text-red-300"
+                  : "bg-amber-500/15 text-amber-300"
+            }`}
+          >
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                realtimeStatus === "connected"
+                  ? "bg-emerald-400"
+                  : realtimeStatus === "failed"
+                    ? "bg-red-400"
+                    : "animate-pulse bg-amber-400"
+              }`}
+            />
+            {realtimeStatus === "connected"
+              ? "Live"
+              : realtimeStatus === "failed"
+                ? "Offline"
+                : "Connecting…"}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

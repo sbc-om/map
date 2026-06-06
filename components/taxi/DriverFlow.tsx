@@ -1,20 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
+  Crosshair,
   Loader2,
   MapPin,
+  MousePointerClick,
+  Move,
   Navigation,
   Phone,
   Power,
   User,
+  X,
 } from "lucide-react";
 import {
   Field,
   Metric,
   Panel,
   PrimaryButton,
+  SmallButton,
   RideLine,
   TextInput,
 } from "./ui";
@@ -28,29 +33,48 @@ import {
   patchRide,
   releaseDriver,
   setDriverStatus,
+  updateDriverLocation,
 } from "@/lib/taxi/actions";
-import { getRouteEstimate } from "@/lib/taxi/routing";
+import { getRouteEstimate, interpolateAlongPath } from "@/lib/taxi/routing";
 import { formatFare } from "@/lib/taxi/fare";
 import { haversineKm } from "@/lib/taxi/matching";
-import { MATCH_RADIUS_KM, VEHICLE_TYPES } from "@/constants/taxi-config";
+import {
+  APPROACH_TICK_MS,
+  DRIVER_APPROACH_MS,
+  DRIVER_TRIP_MS,
+  MATCH_RADIUS_KM,
+  VEHICLE_TYPES,
+} from "@/constants/taxi-config";
 import type { RideRequest, VehicleType } from "@/types/taxi";
 
 interface DriverFlowProps {
   onExit: () => void;
+  registerMapClick: (handler: ((lat: number, lng: number) => void) | null) => void;
+  onPickModeChange?: (active: boolean) => void;
 }
 
-export function DriverFlow({ onExit }: DriverFlowProps) {
+export function DriverFlow({
+  onExit,
+  registerMapClick,
+  onPickModeChange,
+}: DriverFlowProps) {
   const driver = useDriverSession();
   const rides = useRides();
   const taxiMap = useTaxiMap();
 
   const [goingOnline, setGoingOnline] = useState(false);
+  const [pickingSelf, setPickingSelf] = useState(false);
+  const [locating, setLocating] = useState(false);
 
   const isOnline = driver?.status === "ONLINE";
   const activeRide = driver?.activeRideId ? rides[driver.activeRideId] : null;
 
-  // Heartbeat GPS while online (and not stuck on a finished session).
-  useDriverTracking(driver?.id ?? null, !!driver && driver.status !== "OFFLINE");
+  // Heartbeat GPS while online and idle. During an active ride the position is
+  // driven by the approach simulation, so real GPS is paused to avoid conflicts.
+  useDriverTracking(
+    driver?.id ?? null,
+    !!driver && driver.status !== "OFFLINE" && !activeRide
+  );
 
   // ── Registration ───────────────────────────────────────────────────────────
   const [fullName, setFullName] = useState("");
@@ -77,23 +101,28 @@ export function DriverFlow({ onExit }: DriverFlowProps) {
   // ── Online / offline toggle ────────────────────────────────────────────────
   const goOnline = useCallback(() => {
     if (!driver) return;
+
+    // Already have a location (e.g. set manually on the map) → go online with it.
+    const goOnlineWith = (loc?: { lat: number; lng: number }) => {
+      setDriverStatus(driver.id, "ONLINE", loc ?? driver.location ?? undefined);
+      setGoingOnline(false);
+      toast.success("You are online");
+    };
+
     if (typeof navigator === "undefined" || !navigator.geolocation) {
-      toast.error("Geolocation is required to go online");
+      if (driver.location) return goOnlineWith();
+      toast.error("Set your location on the map first");
       return;
     }
+
     setGoingOnline(true);
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setDriverStatus(driver.id, "ONLINE", {
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-        });
-        setGoingOnline(false);
-        toast.success("You are online");
-      },
+      (pos) =>
+        goOnlineWith({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
       () => {
+        if (driver.location) return goOnlineWith();
         setGoingOnline(false);
-        toast.error("Could not get your location. Enable GPS and retry.");
+        toast.error("Could not get your location. Set it on the map.");
       },
       { enableHighAccuracy: true, timeout: 10_000 }
     );
@@ -104,6 +133,57 @@ export function DriverFlow({ onExit }: DriverFlowProps) {
     setDriverStatus(driver.id, "OFFLINE");
     toast("You are offline");
   }, [driver]);
+
+  // ── Detect / set the driver's own location ─────────────────────────────────
+  const detectMyLocation = useCallback(() => {
+    if (!driver) return;
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      toast.error("Geolocation is not supported. Set it on the map instead.");
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        updateDriverLocation(driver.id, p);
+        taxiMap.flyTo(p, 15);
+        setLocating(false);
+      },
+      () => {
+        setLocating(false);
+        toast.error("Could not detect your location. Set it on the map.");
+      },
+      { enableHighAccuracy: true, timeout: 10_000 }
+    );
+  }, [driver, taxiMap]);
+
+  // Show the driver's own car marker; draggable so it can be positioned by hand.
+  useEffect(() => {
+    if (!driver?.location) {
+      taxiMap.setSelfDriver(null);
+      return;
+    }
+    taxiMap.setSelfDriver(driver.location, {
+      draggable: true,
+      onDragEnd: (p) => updateDriverLocation(driver.id, p),
+    });
+  }, [driver, taxiMap]);
+
+  // Tap-on-map to set the driver's location.
+  useEffect(() => {
+    onPickModeChange?.(pickingSelf);
+    if (!pickingSelf || !driver) {
+      registerMapClick(null);
+      return;
+    }
+    const handler = (lat: number, lng: number) => {
+      updateDriverLocation(driver.id, { lat, lng });
+      taxiMap.flyTo({ lat, lng }, 15);
+      setPickingSelf(false);
+    };
+    registerMapClick(handler);
+    return () => registerMapClick(null);
+  }, [pickingSelf, driver, registerMapClick, onPickModeChange, taxiMap]);
 
   // ── Incoming requests within range, nearest first ──────────────────────────
   const incoming = useMemo(() => {
@@ -119,6 +199,13 @@ export function DriverFlow({ onExit }: DriverFlowProps) {
   }, [rides, driver, isOnline]);
 
   // ── Draw the active ride route on the map ──────────────────────────────────
+  // Keep a ref to the latest driver location so route/animation logic can read
+  // it without re-subscribing on every GPS / simulation tick.
+  const driverLocRef = useRef(driver?.location ?? null);
+  useEffect(() => {
+    driverLocRef.current = driver?.location ?? null;
+  }, [driver?.location]);
+
   useEffect(() => {
     if (!activeRide) {
       taxiMap.drawRoute(null);
@@ -131,7 +218,14 @@ export function DriverFlow({ onExit }: DriverFlowProps) {
     let cancelled = false;
     (async () => {
       try {
-        const r = await getRouteEstimate(activeRide.pickup, activeRide.destination);
+        // Before pickup: show the approach path (driver → pickup).
+        // After pickup: show the trip path (pickup → destination).
+        const approach = activeRide.status === "ACCEPTED";
+        const from = approach
+          ? driverLocRef.current ?? activeRide.pickup
+          : activeRide.pickup;
+        const to = approach ? activeRide.pickup : activeRide.destination;
+        const r = await getRouteEstimate(from, to);
         if (!cancelled) taxiMap.drawRoute(r.coordinates);
       } catch {
         /* leave markers without a drawn route */
@@ -141,6 +235,69 @@ export function DriverFlow({ onExit }: DriverFlowProps) {
       cancelled = true;
     };
   }, [activeRide, taxiMap]);
+
+  // ── Movement simulation: drive the car smoothly along the real route ───────
+  //   • ACCEPTED     → drive from the driver's spot to the pickup, then ARRIVE.
+  //   • IN_PROGRESS  → carry the passenger from pickup to destination, then
+  //                    COMPLETE the trip and release the driver.
+  // Keyed on stable primitives (driver id + ride id + status) so it starts once
+  // per phase — NOT on every location tick (which would reset the animation).
+  const simRef = useRef<string | null>(null);
+  const driverId = driver?.id ?? null;
+  const rideId = activeRide?.id ?? null;
+  const rideStatus = activeRide?.status ?? null;
+  useEffect(() => {
+    if (!driverId || !rideId || !activeRide) return;
+    const approach = rideStatus === "ACCEPTED";
+    const trip = rideStatus === "IN_PROGRESS";
+    if (!approach && !trip) return;
+
+    const phaseKey = `${rideId}:${rideStatus}`;
+    if (simRef.current === phaseKey) return; // already animating this phase
+    const from = approach
+      ? driverLocRef.current ?? activeRide.pickup
+      : activeRide.pickup;
+    const to = approach ? activeRide.pickup : activeRide.destination;
+    const durationMs = approach ? DRIVER_APPROACH_MS : DRIVER_TRIP_MS;
+
+    simRef.current = phaseKey;
+    let cancelled = false;
+    let timer: ReturnType<typeof setInterval> | null = null;
+
+    (async () => {
+      const route = await getRouteEstimate(from, to);
+      if (cancelled) return;
+      const coords = route.coordinates;
+      const startedAt = Date.now();
+
+      const step = () => {
+        if (cancelled) return;
+        const t = Math.min(1, (Date.now() - startedAt) / durationMs);
+        updateDriverLocation(driverId, interpolateAlongPath(coords, t));
+        if (t >= 1) {
+          if (timer) clearInterval(timer);
+          timer = null;
+          if (approach) {
+            // Reached the pickup → wait for the driver to start the trip.
+            patchRide(rideId, { status: "ARRIVED" });
+          } else {
+            // Reached the destination → finish the ride automatically.
+            patchRide(rideId, { status: "COMPLETED" });
+            releaseDriver(driverId);
+          }
+        }
+      };
+
+      step(); // place the car at the route start immediately
+      timer = setInterval(step, APPROACH_TICK_MS);
+    })();
+
+    return () => {
+      cancelled = true;
+      if (timer) clearInterval(timer);
+      if (simRef.current === phaseKey) simRef.current = null;
+    };
+  }, [driverId, rideId, rideStatus, activeRide]);
 
   const handleAccept = useCallback(
     (ride: RideRequest) => {
@@ -272,7 +429,26 @@ export function DriverFlow({ onExit }: DriverFlowProps) {
   // Dashboard (online / offline + incoming requests)
   // ─────────────────────────────────────────────────────────────────────────
   return (
-    <Panel title={driver.fullName.split(" ")[0]} onExit={onExit}>
+    <>
+      {pickingSelf && (
+        <div className="pointer-events-none fixed left-1/2 top-4 z-[1100] flex -translate-x-1/2 justify-center px-4 sm:top-6">
+          <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-amber-400/30 bg-zinc-900/90 py-2 pl-4 pr-2 shadow-2xl backdrop-blur-xl">
+            <MousePointerClick className="h-4 w-4 shrink-0 animate-pulse text-amber-400" />
+            <span className="text-xs font-semibold text-white">
+              Tap anywhere on the map to set your location
+            </span>
+            <button
+              onClick={() => setPickingSelf(false)}
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-white/70 transition hover:bg-white/20 hover:text-white"
+              aria-label="Cancel map selection"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      <Panel title={driver.fullName.split(" ")[0]} onExit={onExit}>
       <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 p-3">
         <div className="flex items-center gap-3">
           <span
@@ -305,6 +481,44 @@ export function DriverFlow({ onExit }: DriverFlowProps) {
           )}
           {isOnline ? "Go offline" : "Go online"}
         </button>
+      </div>
+
+      {/* My location ------------------------------------------------------- */}
+      <div className="mt-3 rounded-2xl border border-white/10 bg-white/5 p-3">
+        <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-white/45">
+          <MapPin className="h-3.5 w-3.5 text-amber-400" />
+          My location
+        </div>
+        <p className="mb-2.5 text-xs text-white/55">
+          {driver.location
+            ? `${driver.location.lat.toFixed(5)}, ${driver.location.lng.toFixed(5)}`
+            : "Not set yet — use GPS or pick it on the map."}
+        </p>
+        <div className="flex gap-2">
+          <SmallButton
+            onClick={detectMyLocation}
+            icon={
+              locating ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Crosshair className="h-3.5 w-3.5" />
+              )
+            }
+            label="Use GPS"
+          />
+          <SmallButton
+            active={pickingSelf}
+            onClick={() => setPickingSelf((v) => !v)}
+            icon={<MapPin className="h-3.5 w-3.5" />}
+            label={pickingSelf ? "Tap the map…" : "Set on map"}
+          />
+        </div>
+        {driver.location && (
+          <p className="mt-2 flex items-center gap-1.5 text-[11px] text-white/40">
+            <Move className="h-3 w-3 shrink-0 text-amber-400/70" />
+            Drag the 🚕 marker on the map to move yourself around
+          </p>
+        )}
       </div>
 
       {!isOnline ? (
@@ -376,5 +590,6 @@ export function DriverFlow({ onExit }: DriverFlowProps) {
         Sign out
       </button>
     </Panel>
+    </>
   );
 }

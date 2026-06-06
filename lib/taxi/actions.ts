@@ -7,6 +7,7 @@
  */
 
 import { read, write, update, TAXI_KEYS } from "./store";
+import { publishDriver, publishDriverRemoved, publishRide } from "./realtime";
 import { calculateFare } from "./fare";
 import type {
   DriverSession,
@@ -82,6 +83,7 @@ export function upsertDriver(driver: DriverSession): void {
     [driver.id]: driver,
   }));
   write(TAXI_KEYS.driverSession, driver);
+  publishDriver(driver);
 }
 
 export function patchDriver(
@@ -95,7 +97,10 @@ export function patchDriver(
     next = { ...existing, ...patch };
     return { ...prev, [driverId]: next };
   });
-  if (next) write(TAXI_KEYS.driverSession, next);
+  if (next) {
+    write(TAXI_KEYS.driverSession, next);
+    publishDriver(next);
+  }
   return next;
 }
 
@@ -122,6 +127,7 @@ export function removeDriver(driverId: string): void {
     delete next[driverId];
     return next;
   });
+  publishDriverRemoved(driverId);
 }
 
 export function getDrivers(): DriverMap {
@@ -160,6 +166,7 @@ export function createRideRequest(input: {
   };
 
   update<RideMap>(TAXI_KEYS.rides, {}, (prev) => ({ ...prev, [ride.id]: ride }));
+  publishRide(ride);
   return ride;
 }
 
@@ -174,6 +181,7 @@ export function patchRide(
     next = { ...existing, ...patch, updatedAt: Date.now() };
     return { ...prev, [rideId]: next };
   });
+  if (next) publishRide(next);
   return next;
 }
 
@@ -198,6 +206,7 @@ export function acceptRide(
     driverName: driver.fullName,
     vehicleType: driver.vehicleType,
     vehicleNumber: driver.vehicleNumber,
+    acceptedAt: Date.now(),
   });
 
   if (updated) {

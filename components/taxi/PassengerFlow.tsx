@@ -34,7 +34,7 @@ import {
 import { getRouteEstimate, reverseGeocode } from "@/lib/taxi/routing";
 import { calculateFare, formatFare } from "@/lib/taxi/fare";
 import { findNearbyDrivers } from "@/lib/taxi/matching";
-import { VEHICLE_TYPES } from "@/constants/taxi-config";
+import { VEHICLE_TYPES, DRIVER_STALE_MS, DRIVER_APPROACH_MS } from "@/constants/taxi-config";
 import type { RouteInfo, TaxiPlace } from "@/types/taxi";
 
 interface PassengerFlowProps {
@@ -57,8 +57,16 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
   const [pickTarget, setPickTarget] = useState<PickTarget>(null);
   const [activeRideId, setActiveRideId] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
 
   const ride = useRide(activeRideId);
+
+  // Tick a 1s clock only while the taxi is approaching, to drive the ETA.
+  useEffect(() => {
+    if (ride?.status !== "ACCEPTED") return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [ride?.status]);
 
   // ── Registration form state ────────────────────────────────────────────────
   const [fullName, setFullName] = useState("");
@@ -200,23 +208,85 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
     return findNearbyDrivers({ pickup }, Object.values(drivers));
   }, [pickup, drivers]);
 
-  // While planning, show available drivers on the map.
-  useEffect(() => {
-    if (activeRideId) return;
-    taxiMap.setDrivers(
-      nearbyDrivers.map((m) => ({ id: m.driver.id, location: m.driver.location! }))
+  // ── All online taxis (live) — always visible on the map, even before a
+  //    pickup is chosen, so the passenger can see cars moving around. ─────────
+  const onlineDrivers = useMemo(() => {
+    const now = Date.now();
+    return Object.values(drivers).filter(
+      (d) =>
+        d.status === "ONLINE" &&
+        d.location !== null &&
+        now - d.lastSeen <= DRIVER_STALE_MS
     );
-  }, [nearbyDrivers, activeRideId, taxiMap]);
+  }, [drivers]);
 
-  // ── Assigned driver live location ──────────────────────────────────────────
+  // ── Assigned driver (once a taxi accepts the ride) ─────────────────────────
   const assignedDriver = ride?.driverId ? drivers[ride.driverId] : undefined;
+  const hasAssignedTaxi =
+    !!assignedDriver?.location &&
+    !!ride &&
+    ride.status !== "REQUESTED" &&
+    ride.status !== "CANCELLED";
+
+  // Taxi visibility on the map:
+  //  • before a taxi accepts → show every online taxi (live), so the
+  //    passenger can watch cars moving around.
+  //  • after the first taxi accepts → show ONLY that taxi heading over.
   useEffect(() => {
-    if (assignedDriver?.location) {
+    if (hasAssignedTaxi && assignedDriver?.location) {
       taxiMap.setDrivers([
         { id: assignedDriver.id, location: assignedDriver.location },
       ]);
+      return;
     }
-  }, [assignedDriver, taxiMap]);
+    taxiMap.setDrivers(
+      onlineDrivers.map((d) => ({ id: d.id, location: d.location! }))
+    );
+  }, [hasAssignedTaxi, assignedDriver, onlineDrivers, taxiMap]);
+
+  // Draw the relevant route as the ride progresses:
+  //  • ACCEPTED  → approach path (taxi → pickup) so the passenger sees the car come.
+  //  • IN_PROGRESS → trip path (pickup → destination).
+  const drawnPhaseRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!ride) return;
+    const phase = `${ride.id}:${ride.status}`;
+    if (drawnPhaseRef.current === phase) return;
+
+    if (ride.status === "ACCEPTED" && assignedDriver?.location) {
+      drawnPhaseRef.current = phase;
+      const from = assignedDriver.location;
+      const to = ride.pickup;
+      let cancelled = false;
+      (async () => {
+        try {
+          const r = await getRouteEstimate(from, to);
+          if (!cancelled) taxiMap.drawRoute(r.coordinates, false);
+        } catch {
+          /* keep markers without a drawn approach route */
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (ride.status === "IN_PROGRESS") {
+      drawnPhaseRef.current = phase;
+      let cancelled = false;
+      (async () => {
+        try {
+          const r = await getRouteEstimate(ride.pickup, ride.destination);
+          if (!cancelled) taxiMap.drawRoute(r.coordinates, false);
+        } catch {
+          /* keep markers without a drawn trip route */
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+  }, [ride, assignedDriver, taxiMap]);
 
   // ── Request a taxi ─────────────────────────────────────────────────────────
   const handleRequest = useCallback(() => {
@@ -274,11 +344,19 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
   // Render: active ride status
   // ─────────────────────────────────────────────────────────────────────────
   if (ride && ride.status !== "CANCELLED") {
+    const approachEtaSec =
+      ride.status === "ACCEPTED" && ride.acceptedAt
+        ? Math.max(
+            0,
+            Math.ceil((DRIVER_APPROACH_MS - (now - ride.acceptedAt)) / 1000)
+          )
+        : null;
     return (
       <Panel title="Your ride" onExit={onExit}>
         <RideStatusView
           status={ride.status}
           nearbyCount={nearbyDrivers.length}
+          etaSeconds={approachEtaSec}
         />
 
         {assignedDriver && ride.status !== "REQUESTED" && (
@@ -433,12 +511,14 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
         </div>
       )}
 
-      {/* Nearby drivers hint */}
+      {/* Driver availability hint */}
       <p className="mt-3 flex items-center gap-1.5 text-xs text-white/45">
         <Navigation className="h-3.5 w-3.5 text-amber-400" />
         {nearbyDrivers.length > 0
           ? `${nearbyDrivers.length} driver${nearbyDrivers.length > 1 ? "s" : ""} nearby`
-          : "No drivers online nearby yet"}
+          : onlineDrivers.length > 0
+          ? `${onlineDrivers.length} taxi${onlineDrivers.length > 1 ? "s" : ""} online — shown on the map`
+          : "No taxis online right now"}
       </p>
 
       <div className="mt-4">
@@ -463,12 +543,18 @@ const STATUS_COPY: Record<string, { title: string; sub: string }> = {
 function RideStatusView({
   status,
   nearbyCount,
+  etaSeconds,
 }: {
   status: string;
   nearbyCount: number;
+  etaSeconds?: number | null;
 }) {
   const copy = STATUS_COPY[status] ?? STATUS_COPY.REQUESTED;
   const pending = status === "REQUESTED";
+  const eta =
+    etaSeconds != null
+      ? `${Math.floor(etaSeconds / 60)}:${String(etaSeconds % 60).padStart(2, "0")}`
+      : null;
   return (
     <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-3">
       <span className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/15">
@@ -480,12 +566,24 @@ function RideStatusView({
           <Navigation className="h-5 w-5 text-amber-400" />
         )}
       </span>
-      <div>
+      <div className="min-w-0 flex-1">
         <p className="text-sm font-bold text-white">{copy.title}</p>
         <p className="text-xs text-white/50">
-          {pending ? `${nearbyCount} drivers nearby` : copy.sub}
+          {pending
+            ? nearbyCount > 0
+              ? `${nearbyCount} taxi${nearbyCount > 1 ? "s" : ""} nearby`
+              : "Looking for nearby taxis…"
+            : copy.sub}
         </p>
       </div>
+      {eta && (
+        <div className="shrink-0 text-right">
+          <p className="text-base font-bold tabular-nums text-amber-400">{eta}</p>
+          <p className="text-[10px] uppercase tracking-wide text-white/40">
+            arriving
+          </p>
+        </div>
+      )}
     </div>
   );
 }

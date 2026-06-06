@@ -7,6 +7,11 @@
 
 import { useSyncExternalStore } from "react";
 import { read, subscribe, TAXI_KEYS } from "@/lib/taxi/store";
+import {
+  getRealtimeStatus,
+  subscribeRealtimeStatus,
+  type RealtimeStatus,
+} from "@/lib/taxi/realtime";
 import type {
   DriverSession,
   PassengerSession,
@@ -54,4 +59,13 @@ export function useDriverSession(): DriverSession | null {
 export function useRide(rideId: string | null): RideRequest | null {
   const rides = useRides();
   return rideId ? rides[rideId] ?? null : null;
+}
+
+/** Live status of the cross-device realtime connection. */
+export function useRealtimeStatus(): RealtimeStatus {
+  return useSyncExternalStore(
+    subscribeRealtimeStatus,
+    getRealtimeStatus,
+    () => "disabled" as RealtimeStatus
+  );
 }

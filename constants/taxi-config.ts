@@ -23,6 +23,15 @@ export const DRIVER_GPS_INTERVAL_MS = 5_000;
 /** A driver is considered stale/offline if not seen for this long (ms) */
 export const DRIVER_STALE_MS = 30_000;
 
+/** Simulated time for an accepted driver to reach the pickup (ms) — 3 minutes */
+export const DRIVER_APPROACH_MS = 180_000;
+
+/** Simulated time to drive the passenger from pickup to destination (ms) — 4 minutes */
+export const DRIVER_TRIP_MS = 240_000;
+
+/** How often the approach simulation broadcasts a new position (ms) */
+export const APPROACH_TICK_MS = 1_000;
+
 /** Maximum search radius for the matching engine (kilometres) */
 export const MATCH_RADIUS_KM = 15;
 

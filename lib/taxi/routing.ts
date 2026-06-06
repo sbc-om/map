@@ -142,6 +142,50 @@ function haversineKm(a: LatLng, b: LatLng): number {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
+/**
+ * Interpolate a point along a polyline at fraction `t` (0…1) of its total
+ * length, measured by real (great-circle) distance so movement speed stays
+ * even regardless of how the route's vertices are spaced. Used to animate a
+ * taxi smoothly along its driving route.
+ */
+export function interpolateAlongPath(
+  coords: [number, number][],
+  t: number
+): LatLng {
+  if (coords.length === 0) return { lat: 0, lng: 0 };
+  const first = coords[0];
+  const last = coords[coords.length - 1];
+  if (coords.length === 1 || t <= 0) return { lat: first[0], lng: first[1] };
+  if (t >= 1) return { lat: last[0], lng: last[1] };
+
+  const segLen: number[] = [];
+  let total = 0;
+  for (let i = 0; i < coords.length - 1; i++) {
+    const d = haversineKm(
+      { lat: coords[i][0], lng: coords[i][1] },
+      { lat: coords[i + 1][0], lng: coords[i + 1][1] }
+    );
+    segLen.push(d);
+    total += d;
+  }
+  if (total === 0) return { lat: last[0], lng: last[1] };
+
+  let target = t * total;
+  for (let i = 0; i < segLen.length; i++) {
+    if (target <= segLen[i] || i === segLen.length - 1) {
+      const frac = segLen[i] === 0 ? 0 : target / segLen[i];
+      const a = coords[i];
+      const b = coords[i + 1];
+      return {
+        lat: a[0] + (b[0] - a[0]) * frac,
+        lng: a[1] + (b[1] - a[1]) * frac,
+      };
+    }
+    target -= segLen[i];
+  }
+  return { lat: last[0], lng: last[1] };
+}
+
 
 /** Format a coordinate as a short fallback address. */
 export function formatLatLng(point: LatLng): string {
