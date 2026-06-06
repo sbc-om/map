@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { ArrowUpRight, Globe } from "lucide-react";
+import { ArrowUpRight, Car, Globe, User } from "lucide-react";
 
 /**
  * Hero - Server Component
- * Minimal: heading · one-liner · single CTA (Open Map)
+ * Minimal: heading · one-liner · CTAs (Open Map + Passenger / Driver modes)
  */
 export function Hero() {
   return (
@@ -23,7 +23,7 @@ export function Hero() {
         and precision geospatial tools.
       </p>
 
-      {/* CTA - Open Map only */}
+      {/* CTA - Open Map */}
       <div className="animate-fadeInUp animation-delay-300 mt-10">
         <Link
           href="/map"
@@ -32,6 +32,24 @@ export function Hero() {
           <Globe className="h-4 w-4" />
           Open Map
           <ArrowUpRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+        </Link>
+      </div>
+
+      {/* Taxi mode actions */}
+      <div className="animate-fadeInUp animation-delay-300 mt-5 flex items-center gap-3">
+        <Link
+          href="/taxi?mode=passenger"
+          className="group flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-6 py-3 text-sm font-semibold text-white backdrop-blur transition-all duration-300 hover:border-amber-400/50 hover:bg-white/10 hover:-translate-y-1 active:scale-95"
+        >
+          <User className="h-4 w-4 text-amber-400" />
+          Passenger
+        </Link>
+        <Link
+          href="/taxi?mode=driver"
+          className="group flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-6 py-3 text-sm font-semibold text-white backdrop-blur transition-all duration-300 hover:border-amber-400/50 hover:bg-white/10 hover:-translate-y-1 active:scale-95"
+        >
+          <Car className="h-4 w-4 text-amber-400" />
+          Driver
         </Link>
       </div>
     </section>
