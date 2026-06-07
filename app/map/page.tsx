@@ -24,7 +24,7 @@ import { MapMain, MapErrorBoundary, MapLoadingSpinner } from "@/components/map";
  */
 export default function MapPage() {
   return (
-    <div className="relative w-full h-screen">
+    <div className="relative w-full h-dvh-screen">
       <MapErrorBoundary>
         <MapProvider>
           <MapMain />

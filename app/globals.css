@@ -273,6 +273,55 @@
 @import "leaflet/dist/leaflet.css";
 @import "tw-animate-css";
 
+/* =====================================================
+   Leaflet rendering fixes (seamless, mobile-friendly)
+   ===================================================== */
+
+/* Match the map container background to the active theme so there is no
+   white/black flash while tiles load. */
+.leaflet-container {
+  background: var(--map-background);
+  /* Crisp text/labels + smooth panning on mobile GPUs. */
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+  font: inherit;
+}
+
+/* Leaflet tiles must stay visually neutral. The app's global `*` base rule
+   assigns border/outline colors to every element, and on some browsers that
+   leaks onto tile <img> elements as visible grid lines. Reset tile visuals at
+   the source instead of fighting seams with oversized images. */
+.leaflet-tile-pane,
+.leaflet-tile-container,
+.leaflet-tile,
+.leaflet-tile-container img,
+img.leaflet-tile {
+  border: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+/* Keep compositing stable without distorting tile geometry. */
+.leaflet-tile-container,
+.leaflet-tile-container img,
+.leaflet-tile {
+  backface-visibility: hidden;
+  will-change: transform;
+}
+
+/* Make Leaflet's default controls finger-friendly and on-brand on touch. */
+.leaflet-touch .leaflet-bar a,
+.leaflet-touch .leaflet-control-zoom a {
+  width: 34px;
+  height: 34px;
+  line-height: 34px;
+}
+.leaflet-control-attribution {
+  font-size: 10px;
+  backdrop-filter: blur(4px);
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @layer base {
@@ -281,6 +330,39 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+
+  /* Mobile-friendly defaults: kill the blue tap flash and avoid rubber-band
+     scrolling that fights with map panning on iOS/Android. */
+  html,
+  body {
+    -webkit-tap-highlight-color: transparent;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer utilities {
+  /* Full-viewport height that respects mobile browser chrome (address bar)
+     and notches. Use on full-screen map / taxi shells instead of h-screen. */
+  .h-dvh-screen {
+    height: 100vh; /* fallback for older browsers */
+    height: 100dvh;
+  }
+  .min-h-dvh-screen {
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+  /* Honour the device safe areas (notch / home indicator). */
+  .safe-px {
+    padding-left: max(env(safe-area-inset-left), 0px);
+    padding-right: max(env(safe-area-inset-right), 0px);
+  }
+  .safe-top {
+    padding-top: max(env(safe-area-inset-top), 0px);
+  }
+  .safe-bottom {
+    padding-bottom: max(env(safe-area-inset-bottom), 0px);
   }
 }
 

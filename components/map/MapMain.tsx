@@ -272,8 +272,18 @@ export function MapMain() {
       url: tileProvider.url,
       attribution: tileProvider.attribution,
       maxZoom: tileProvider.maxZoom,
+      tileSize: tileProvider.tileSize,
+      zoomOffset: tileProvider.zoomOffset,
+      detectRetina: tileProvider.detectRetina,
     }),
-    [tileProvider.url, tileProvider.attribution, tileProvider.maxZoom]
+    [
+      tileProvider.url,
+      tileProvider.attribution,
+      tileProvider.maxZoom,
+      tileProvider.tileSize,
+      tileProvider.zoomOffset,
+      tileProvider.detectRetina,
+    ]
   );
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -290,6 +300,9 @@ export function MapMain() {
           url={tileLayerProps.url}
           attribution={tileLayerProps.attribution}
           maxZoom={tileLayerProps.maxZoom}
+          tileSize={tileLayerProps.tileSize}
+          zoomOffset={tileLayerProps.zoomOffset}
+          detectRetina={tileLayerProps.detectRetina}
         />
         <LeafletGeoJSON data={selectedCountry} style={GEOJSON_STYLE} />
       </LeafletMap>

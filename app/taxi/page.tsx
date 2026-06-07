@@ -10,7 +10,7 @@ import { TaxiMain } from "@/components/taxi";
  */
 export default function TaxiPage() {
   return (
-    <div className="relative h-screen w-full">
+    <div className="relative h-dvh-screen w-full">
       <MapErrorBoundary>
         <MapProvider>
           <TaxiMain />

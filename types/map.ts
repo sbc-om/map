@@ -25,6 +25,9 @@ export interface TileProvider {
   url: string;
   attribution: string;
   maxZoom: number;
+  tileSize?: number;
+  zoomOffset?: number;
+  detectRetina?: boolean;
   category: 'standard' | 'satellite' | 'dark' | 'custom';
 }
 

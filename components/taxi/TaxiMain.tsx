@@ -10,6 +10,7 @@ import { initRealtime } from "@/lib/taxi/realtime";
 import { TaxiModeSelect } from "./TaxiModeSelect";
 import { PassengerFlow } from "./PassengerFlow";
 import { DriverFlow } from "./DriverFlow";
+import { TaxiMapControls } from "./TaxiMapControls";
 import { DEFAULT_PICKUP } from "@/constants/taxi-config";
 import type { TaxiMode } from "@/types/taxi";
 
@@ -31,7 +32,8 @@ function readModeFromUrl(): TaxiMode | null {
 export function TaxiMain({ initialMode = null }: TaxiMainProps) {
   const [mode, setMode] = useState<TaxiMode | null>(initialMode);
   const [picking, setPicking] = useState(false);
-  const { tileProvider } = useMapTileProvider();
+  const { tileProvider, currentProviderId, setProviderId } =
+    useMapTileProvider();
   const map = useLeafletMap();
   const realtimeStatus = useRealtimeStatus();
 
@@ -80,7 +82,7 @@ export function TaxiMain({ initialMode = null }: TaxiMainProps) {
   const exitToSelect = useCallback(() => setMode(null), []);
 
   return (
-    <div className="relative h-screen w-full overflow-hidden bg-zinc-950">
+    <div className="relative h-dvh-screen w-full overflow-hidden bg-zinc-950">
       <LeafletMap
         className="h-full w-full"
         center={DEFAULT_PICKUP}
@@ -91,8 +93,18 @@ export function TaxiMain({ initialMode = null }: TaxiMainProps) {
           url={tileProvider.url}
           attribution={tileProvider.attribution}
           maxZoom={tileProvider.maxZoom}
+          tileSize={tileProvider.tileSize}
+          zoomOffset={tileProvider.zoomOffset}
+          detectRetina={tileProvider.detectRetina}
         />
       </LeafletMap>
+
+      {mode !== null && (
+        <TaxiMapControls
+          currentProviderId={currentProviderId}
+          onProviderChange={setProviderId}
+        />
+      )}
 
       {mode === null && <TaxiModeSelect onSelect={setMode} />}
       {mode === "passenger" && (

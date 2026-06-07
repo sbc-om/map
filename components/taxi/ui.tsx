@@ -13,7 +13,7 @@ export function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <div className="pointer-events-auto absolute left-1/2 top-4 z-[1000] max-h-[calc(100vh-2rem)] w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 overflow-y-auto rounded-3xl border border-white/10 bg-zinc-900/85 p-4 shadow-2xl backdrop-blur-xl sm:left-4 sm:translate-x-0">
+    <div className="pointer-events-auto absolute left-1/2 top-[max(1rem,env(safe-area-inset-top))] z-[1000] max-h-[calc(100dvh-2rem)] w-[calc(100%-1.5rem)] max-w-sm -translate-x-1/2 overflow-y-auto overscroll-contain rounded-3xl border border-white/10 bg-zinc-900/85 p-4 shadow-2xl backdrop-blur-xl sm:left-4 sm:w-[calc(100%-2rem)] sm:translate-x-0">
       <div className="mb-3 flex items-center justify-between">
         <button
           onClick={onExit}

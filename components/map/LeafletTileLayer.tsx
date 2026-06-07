@@ -37,6 +37,9 @@ export function LeafletTileLayer({
   attribution = "",
   maxZoom = 19,
   subdomains = DEFAULT_SUBDOMAINS,
+  tileSize = 256,
+  zoomOffset = 0,
+  detectRetina = false,
 }: LeafletTileLayerProps) {
   const map = useLeafletMap();
   const tileLayerRef = useRef<TileLayer | null>(null);
@@ -85,6 +88,13 @@ export function LeafletTileLayer({
           attribution,
           maxZoom,
           subdomains: subdomainsList,
+          tileSize,
+          zoomOffset,
+          detectRetina,
+          updateWhenIdle: true,
+          updateWhenZooming: false,
+          keepBuffer: 4,
+          crossOrigin: true,
         });
 
         // Add error handling for tile loading
@@ -115,7 +125,16 @@ export function LeafletTileLayer({
         }
       }
     };
-  }, [map, url, attribution, maxZoom, subdomainsKey]);
+  }, [
+    map,
+    url,
+    attribution,
+    maxZoom,
+    subdomainsKey,
+    tileSize,
+    zoomOffset,
+    detectRetina,
+  ]);
 
   // This component doesn't render anything visible
   return null;

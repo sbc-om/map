@@ -28,6 +28,9 @@ export interface LeafletTileLayerProps {
   attribution?: string;
   maxZoom?: number;
   subdomains?: string[];
+  tileSize?: number;
+  zoomOffset?: number;
+  detectRetina?: boolean;
 }
 
 /**
