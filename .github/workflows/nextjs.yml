@@ -28,6 +28,9 @@ jobs:
   # Build job
   build:
     runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_ABLY_KEY: ${{ secrets.NEXT_PUBLIC_ABLY_KEY }}
+      NEXT_PUBLIC_MAPILLARY_TOKEN: ${{ secrets.NEXT_PUBLIC_MAPILLARY_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
