@@ -364,6 +364,13 @@ img.leaflet-tile {
   .safe-bottom {
     padding-bottom: max(env(safe-area-inset-bottom), 0px);
   }
+
+  .taxi-mobile-scroll {
+    scroll-padding-top: 1rem;
+    scroll-padding-bottom: 8rem;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
 }
 
 /* ── Draggable POI preview marker ─────────────────────────────────────────── */

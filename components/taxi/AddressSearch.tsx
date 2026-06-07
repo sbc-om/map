@@ -30,6 +30,35 @@ export function AddressSearch({
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const ensureVisibleOnMobile = () => {
+    if (typeof window === "undefined") return;
+    const run = () => {
+      const input = inputRef.current;
+      if (!input) return;
+      input.scrollIntoView({ block: "center", behavior: "smooth" });
+      const scroller = input.closest<HTMLElement>("[data-taxi-scroll-area='true']");
+      if (!scroller) return;
+
+      const inputRect = input.getBoundingClientRect();
+      const scrollerRect = scroller.getBoundingClientRect();
+      const topGap = inputRect.top - scrollerRect.top;
+      const bottomGap = scrollerRect.bottom - inputRect.bottom;
+
+      if (topGap < 20) {
+        scroller.scrollBy({ top: topGap - 28, behavior: "smooth" });
+      } else if (bottomGap < 96) {
+        scroller.scrollBy({ top: 96 - bottomGap, behavior: "smooth" });
+      }
+    };
+
+    requestAnimationFrame(() => {
+      run();
+      window.setTimeout(run, 250);
+      window.setTimeout(run, 500);
+    });
+  };
 
   // Keep the input in sync when the parent updates the value (e.g. reverse geocode).
   useEffect(() => setQuery(value), [value]);
@@ -74,15 +103,19 @@ export function AddressSearch({
           style={{ background: dotColor }}
         />
         <input
+          ref={inputRef}
           value={query}
           placeholder={placeholder}
-          onFocus={() => setOpen(true)}
+          onFocus={() => {
+            setOpen(true);
+            ensureVisibleOnMobile();
+          }}
           onChange={(e) => {
             setQuery(e.target.value);
             onChangeText?.(e.target.value);
             setOpen(true);
           }}
-          className="w-full bg-transparent text-sm text-white placeholder:text-white/35 focus:outline-none"
+          className="w-full bg-transparent text-base text-white placeholder:text-white/35 focus:outline-none sm:text-sm"
         />
         {loading ? (
           <Loader2 className="h-4 w-4 shrink-0 animate-spin text-white/40" />

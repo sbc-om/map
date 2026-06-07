@@ -15,6 +15,7 @@ export function Panel({
   children: React.ReactNode;
 }) {
   const [isMobile, setIsMobile] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const snapPoints = [0.16, 0.42, 0.88];
   const [snap, setSnap] = useState<number | string | null>(snapPoints[1]);
 
@@ -25,6 +26,27 @@ export function Panel({
     update();
     media.addEventListener("change", update);
     return () => media.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const syncViewport = () => {
+      const vv = window.visualViewport;
+      setViewportHeight(vv ? Math.round(vv.height) : window.innerHeight);
+    };
+
+    syncViewport();
+    const vv = window.visualViewport;
+    window.addEventListener("resize", syncViewport);
+    vv?.addEventListener("resize", syncViewport);
+    vv?.addEventListener("scroll", syncViewport);
+
+    return () => {
+      window.removeEventListener("resize", syncViewport);
+      vv?.removeEventListener("resize", syncViewport);
+      vv?.removeEventListener("scroll", syncViewport);
+    };
   }, []);
 
   const content = (
@@ -58,10 +80,21 @@ export function Panel({
           <Drawer.Content
             className="pointer-events-auto fixed bottom-0 left-0 right-0 z-[1000] flex h-full max-h-[92dvh] flex-col rounded-t-[28px] border-t border-white/10 bg-zinc-950/92 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-24px_60px_rgba(0,0,0,0.42)] backdrop-blur-2xl"
             aria-describedby={undefined}
+            style={
+              viewportHeight
+                ? {
+                    height: `${viewportHeight}px`,
+                    maxHeight: `${viewportHeight}px`,
+                  }
+                : undefined
+            }
           >
             <div className="mx-auto mb-3 h-1.5 w-14 rounded-full bg-white/15" />
             <Drawer.Title className="sr-only">{title}</Drawer.Title>
-            <div className="scrollbar-thin flex-1 overflow-y-auto overscroll-contain pb-4">
+            <div
+              data-taxi-scroll-area="true"
+              className="scrollbar-thin taxi-mobile-scroll flex-1 overflow-y-auto overscroll-contain pb-4"
+            >
               {content}
             </div>
           </Drawer.Content>
@@ -154,7 +187,7 @@ export function TextInput(
   return (
     <input
       {...props}
-      className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-white/35 focus:border-amber-400/60 focus:outline-none"
+      className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-base text-white placeholder:text-white/35 focus:border-amber-400/60 focus:outline-none sm:text-sm"
     />
   );
 }
