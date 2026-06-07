@@ -20,6 +20,50 @@ import type { LatLng } from "@/types/taxi";
 
 type LType = typeof import("leaflet");
 
+type MarkerMotion = {
+  location: LatLng;
+  heading: number;
+};
+
+function calculateBearing(from: LatLng, to: LatLng) {
+  const lat1 = (from.lat * Math.PI) / 180;
+  const lat2 = (to.lat * Math.PI) / 180;
+  const deltaLng = ((to.lng - from.lng) * Math.PI) / 180;
+
+  const y = Math.sin(deltaLng) * Math.cos(lat2);
+  const x =
+    Math.cos(lat1) * Math.sin(lat2) -
+    Math.sin(lat1) * Math.cos(lat2) * Math.cos(deltaLng);
+
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+}
+
+function movementHeading(previous: MarkerMotion | undefined, next: LatLng) {
+  if (!previous) return 90;
+
+  const latDelta = Math.abs(next.lat - previous.location.lat);
+  const lngDelta = Math.abs(next.lng - previous.location.lng);
+
+  // Ignore GPS noise / tiny simulation jitter to keep the taxi stable.
+  if (latDelta < 0.00001 && lngDelta < 0.00001) {
+    return previous.heading;
+  }
+
+  return calculateBearing(previous.location, next);
+}
+
+function applyMarkerHeading(marker: Marker, heading: number) {
+  const element = marker.getElement();
+  if (!element) return;
+
+  const body = element.querySelector<HTMLElement>(".taxi-car-marker__body");
+  if (!body) return;
+
+  // The taxi emoji faces right/east at 0deg, while geographic bearing uses
+  // north=0. Convert bearing to the emoji's native orientation.
+  body.style.transform = `translateZ(0) rotate(${heading - 90}deg)`;
+}
+
 function pinIcon(L: LType, color: string, glyph: string) {
   return L.divIcon({
     className: "",
@@ -39,14 +83,25 @@ function pinIcon(L: LType, color: string, glyph: string) {
 function carIcon(L: LType) {
   return L.divIcon({
     className: "taxi-car-marker",
-    html: `<div style="
-      display:flex;align-items:center;justify-content:center;
-      width:44px;height:44px;
-      font-size:34px;line-height:1;
-      filter:drop-shadow(0 2px 4px rgba(0,0,0,0.55));
-    ">🚕</div>`,
-    iconSize: [44, 44],
-    iconAnchor: [22, 22],
+    html: `<div class="taxi-car-marker__body" style="
+      width:46px;
+      height:46px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      transform:translateZ(0) rotate(0deg);
+      transform-origin:50% 50%;
+      filter:drop-shadow(0 6px 12px rgba(15,23,42,0.32));
+    ">
+      <span style="
+        font-size:34px;
+        line-height:1;
+        transform:translateY(1px);
+        text-shadow:0 1px 0 rgba(255,255,255,0.4);
+      ">🚕</span>
+    </div>`,
+    iconSize: [46, 46],
+    iconAnchor: [23, 23],
   });
 }
 
@@ -58,7 +113,9 @@ export function useTaxiMap() {
   const destRef = useRef<Marker | null>(null);
   const routeRef = useRef<LayerGroup | null>(null);
   const driversRef = useRef<Map<string, Marker>>(new Map());
+  const driverMotionRef = useRef<Map<string, MarkerMotion>>(new Map());
   const selfRef = useRef<Marker | null>(null);
+  const selfMotionRef = useRef<MarkerMotion | null>(null);
 
   const ensureL = useCallback(async (): Promise<LType | null> => {
     if (lRef.current) return lRef.current;
@@ -172,20 +229,33 @@ export function useTaxiMap() {
         if (!next.has(driverId)) {
           marker.remove();
           driversRef.current.delete(driverId);
+          driverMotionRef.current.delete(driverId);
         }
       }
       // Add or move current markers
       for (const d of drivers) {
         const existing = driversRef.current.get(d.id);
+        const nextHeading = movementHeading(
+          driverMotionRef.current.get(d.id),
+          d.location
+        );
+
         if (existing) {
           existing.setLatLng([d.location.lat, d.location.lng]);
+          applyMarkerHeading(existing, nextHeading);
         } else {
           const marker = L.marker([d.location.lat, d.location.lng], {
             icon: carIcon(L),
             zIndexOffset: 600,
           }).addTo(map);
+          applyMarkerHeading(marker, nextHeading);
           driversRef.current.set(d.id, marker);
         }
+
+        driverMotionRef.current.set(d.id, {
+          location: d.location,
+          heading: nextHeading,
+        });
       }
     },
     [ensureL, map]
@@ -208,10 +278,13 @@ export function useTaxiMap() {
         return;
       }
       const existing = selfRef.current;
+      const nextHeading = movementHeading(selfMotionRef.current ?? undefined, point);
       if (existing) {
         existing.setLatLng([point.lat, point.lng]);
         if (opts?.draggable) existing.dragging?.enable();
         else existing.dragging?.disable();
+        applyMarkerHeading(existing, nextHeading);
+        selfMotionRef.current = { location: point, heading: nextHeading };
         return;
       }
       const marker = L.marker([point.lat, point.lng], {
@@ -219,6 +292,7 @@ export function useTaxiMap() {
         draggable: opts?.draggable ?? false,
         zIndexOffset: 1000,
       }).addTo(map);
+      applyMarkerHeading(marker, nextHeading);
       if (opts?.draggable && opts.onDragEnd) {
         marker.on("dragend", () => {
           const ll = marker.getLatLng();
@@ -226,6 +300,7 @@ export function useTaxiMap() {
         });
       }
       selfRef.current = marker;
+      selfMotionRef.current = { location: point, heading: nextHeading };
     },
     [ensureL, map]
   );
@@ -239,8 +314,10 @@ export function useTaxiMap() {
     routeRef.current = null;
     selfRef.current?.remove();
     selfRef.current = null;
+    selfMotionRef.current = null;
     driversRef.current.forEach((m) => m.remove());
     driversRef.current.clear();
+    driverMotionRef.current.clear();
   }, []);
 
   // Clean up all layers on unmount.
