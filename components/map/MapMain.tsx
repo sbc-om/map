@@ -7,7 +7,6 @@ import { LeafletTileLayer } from "./LeafletTileLayer";
 import { LeafletGeoJSON } from "./LeafletGeoJSON";
 import { MapSearchBar } from "./MapSearchBar";
 import { MapTopBar } from "./MapTopBar";
-import { MapTileSwitcher } from "./MapTileSwitcher";
 import { MapControls } from "./MapControls";
 import { MapDetailsPanel } from "./MapDetailsPanel";
 import { MapMeasurementPanel } from "./MapMeasurementPanel";
@@ -61,8 +60,7 @@ export function MapMain() {
 
   // ── Hooks ──────────────────────────────────────────────────────────────────
   const map = useLeafletMap();
-  const { tileProvider, currentProviderId, setProviderId } =
-    useMapTileProvider();
+  const { tileProvider } = useMapTileProvider();
   const { isOpen: isContextMenuOpen, position: contextMenuPosition, close: closeContextMenu } =
     useMapContextMenu();
   const { addMarker } = useMapMarkers();
@@ -321,12 +319,6 @@ export function MapMain() {
 
       {/* ── Top Bar (theme + user) ── */}
       <MapTopBar />
-
-      {/* ── Tile Switcher ── */}
-      <MapTileSwitcher
-        selectedProviderId={currentProviderId}
-        onProviderChange={setProviderId}
-      />
 
       {/* ── Controls ── */}
       <MapControls />

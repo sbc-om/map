@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { AddressSearch } from "./AddressSearch";
 import {
+  AccordionSection,
   Field,
   Metric,
   Panel,
@@ -360,34 +361,48 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
         />
 
         {assignedDriver && ride.status !== "REQUESTED" && (
-          <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3">
-            <div className="flex items-center gap-3">
-              <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-500/15 text-xl">
-                {VEHICLE_TYPES[assignedDriver.vehicleType].emoji}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-bold text-white">
-                  {assignedDriver.fullName}
-                </p>
-                <p className="text-xs text-white/50">
-                  {VEHICLE_TYPES[assignedDriver.vehicleType].label} ·{" "}
-                  {assignedDriver.vehicleNumber}
-                </p>
+          <AccordionSection
+            title="Driver details"
+            subtitle="Your assigned taxi"
+            defaultOpen
+            accent="green"
+          >
+            <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+              <div className="flex items-center gap-3">
+                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-500/15 text-xl">
+                  {VEHICLE_TYPES[assignedDriver.vehicleType].emoji}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-bold text-white">
+                    {assignedDriver.fullName}
+                  </p>
+                  <p className="text-xs text-white/50">
+                    {VEHICLE_TYPES[assignedDriver.vehicleType].label} ·{" "}
+                    {assignedDriver.vehicleNumber}
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
+          </AccordionSection>
         )}
 
-        <div className="mt-3 space-y-2">
-          <RideLine icon={<MapPin className="h-4 w-4 text-green-400" />} text={ride.pickup.address} />
-          <RideLine icon={<MapPin className="h-4 w-4 text-red-400" />} text={ride.destination.address} />
-        </div>
+        <AccordionSection
+          title="Trip details"
+          subtitle="Pickup, destination, and fare"
+          defaultOpen
+          accent="amber"
+        >
+          <div className="space-y-2">
+            <RideLine icon={<MapPin className="h-4 w-4 text-green-400" />} text={ride.pickup.address} />
+            <RideLine icon={<MapPin className="h-4 w-4 text-red-400" />} text={ride.destination.address} />
+          </div>
 
-        <div className="mt-3 grid grid-cols-3 gap-2">
-          <Metric label="Distance" value={`${ride.distanceKm} km`} />
-          <Metric label="Time" value={`${ride.durationMin} min`} />
-          <Metric label="Fare" value={formatFare(ride.fare)} accent />
-        </div>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            <Metric label="Distance" value={`${ride.distanceKm} km`} />
+            <Metric label="Time" value={`${ride.durationMin} min`} />
+            <Metric label="Fare" value={formatFare(ride.fare)} accent />
+          </div>
+        </AccordionSection>
 
         {ride.status === "COMPLETED" ? (
           <button
@@ -434,6 +449,12 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
       )}
 
       <Panel title={`Hi, ${passenger.fullName.split(" ")[0]}`} onExit={onExit}>
+      <AccordionSection
+        title="Trip setup"
+        subtitle="Pickup, destination, and map selection"
+        defaultOpen
+        accent="green"
+      >
       <div className="space-y-2.5">
         {/* Pickup */}
         <AddressSearch
@@ -485,17 +506,25 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
           </p>
         )}
       </div>
+      </AccordionSection>
 
 
       {/* Fare estimate */}
-      {routing && (
-        <div className="mt-4 flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 py-4 text-sm text-white/60">
-          <Loader2 className="h-4 w-4 animate-spin" /> Calculating route…
-        </div>
-      )}
+      {(routing || fare) && (
+        <AccordionSection
+          title="Fare estimate"
+          subtitle={routing ? "Calculating the best route" : "Distance, time, and price"}
+          defaultOpen
+          accent="amber"
+        >
+        {routing && (
+          <div className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 py-4 text-sm text-white/60">
+            <Loader2 className="h-4 w-4 animate-spin" /> Calculating route…
+          </div>
+        )}
 
-      {fare && !routing && (
-        <div className="mt-4 rounded-2xl border border-amber-400/20 bg-amber-500/[0.06] p-4">
+        {fare && !routing && (
+          <div className="rounded-2xl border border-amber-400/20 bg-amber-500/[0.06] p-4">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-amber-300/80">
             <RouteIcon className="h-3.5 w-3.5" /> Estimated trip
           </div>
@@ -509,17 +538,24 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
             {fare.durationMin}min × {fare.perMinute} {fare.currency}
           </p>
         </div>
+        )}
+        </AccordionSection>
       )}
 
-      {/* Driver availability hint */}
-      <p className="mt-3 flex items-center gap-1.5 text-xs text-white/45">
-        <Navigation className="h-3.5 w-3.5 text-amber-400" />
-        {nearbyDrivers.length > 0
-          ? `${nearbyDrivers.length} driver${nearbyDrivers.length > 1 ? "s" : ""} nearby`
-          : onlineDrivers.length > 0
-          ? `${onlineDrivers.length} taxi${onlineDrivers.length > 1 ? "s" : ""} online — shown on the map`
-          : "No taxis online right now"}
-      </p>
+      <AccordionSection
+        title="Nearby taxis"
+        subtitle="Live availability around your pickup"
+        accent="blue"
+      >
+        <p className="flex items-center gap-1.5 text-xs text-white/45">
+          <Navigation className="h-3.5 w-3.5 text-amber-400" />
+          {nearbyDrivers.length > 0
+            ? `${nearbyDrivers.length} driver${nearbyDrivers.length > 1 ? "s" : ""} nearby`
+            : onlineDrivers.length > 0
+            ? `${onlineDrivers.length} taxi${onlineDrivers.length > 1 ? "s" : ""} online — shown on the map`
+            : "No taxis online right now"}
+        </p>
+      </AccordionSection>
 
       <div className="mt-4">
         <PrimaryButton disabled={!fare || routing} onClick={handleRequest}>

@@ -11,9 +11,11 @@ import { MapUser } from "./MapUser";
 export const MapTopBar = memo(function MapTopBar() {
   return (
     <div className="absolute right-0 top-3 z-[1000] pointer-events-none pr-4">
-      <div className="hidden sm:flex items-center gap-2 pointer-events-auto">
+      <div className="flex items-center gap-2 pointer-events-auto">
         <MapThemeSwitcher />
-        <MapUser />
+        <div className="hidden sm:block">
+          <MapUser />
+        </div>
       </div>
     </div>
   );

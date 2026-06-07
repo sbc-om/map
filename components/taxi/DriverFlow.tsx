@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import {
+  AccordionSection,
   Field,
   Metric,
   Panel,
@@ -372,37 +373,51 @@ export function DriverFlow({
   if (activeRide && activeRide.status !== "COMPLETED" && activeRide.status !== "CANCELLED") {
     return (
       <Panel title="Active trip" onExit={onExit}>
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-          <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/15 text-amber-400">
-              <User className="h-5 w-5" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-bold text-white">
-                {activeRide.passengerName}
-              </p>
-              {activeRide.passengerMobile && (
-                <a
-                  href={`tel:${activeRide.passengerMobile}`}
-                  className="flex items-center gap-1 text-xs text-amber-400"
-                >
-                  <Phone className="h-3 w-3" /> {activeRide.passengerMobile}
-                </a>
-              )}
+        <AccordionSection
+          title="Passenger details"
+          subtitle="Who you are picking up"
+          defaultOpen
+          accent="green"
+        >
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/15 text-amber-400">
+                <User className="h-5 w-5" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-bold text-white">
+                  {activeRide.passengerName}
+                </p>
+                {activeRide.passengerMobile && (
+                  <a
+                    href={`tel:${activeRide.passengerMobile}`}
+                    className="flex items-center gap-1 text-xs text-amber-400"
+                  >
+                    <Phone className="h-3 w-3" /> {activeRide.passengerMobile}
+                  </a>
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        </AccordionSection>
 
-        <div className="mt-3 space-y-2">
-          <RideLine icon={<MapPin className="h-4 w-4 text-green-400" />} text={activeRide.pickup.address} />
-          <RideLine icon={<MapPin className="h-4 w-4 text-red-400" />} text={activeRide.destination.address} />
-        </div>
+        <AccordionSection
+          title="Trip details"
+          subtitle="Pickup, destination, and fare"
+          defaultOpen
+          accent="amber"
+        >
+          <div className="space-y-2">
+            <RideLine icon={<MapPin className="h-4 w-4 text-green-400" />} text={activeRide.pickup.address} />
+            <RideLine icon={<MapPin className="h-4 w-4 text-red-400" />} text={activeRide.destination.address} />
+          </div>
 
-        <div className="mt-3 grid grid-cols-3 gap-2">
-          <Metric label="Distance" value={`${activeRide.distanceKm} km`} />
-          <Metric label="Time" value={`${activeRide.durationMin} min`} />
-          <Metric label="Fare" value={formatFare(activeRide.fare)} accent />
-        </div>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            <Metric label="Distance" value={`${activeRide.distanceKm} km`} />
+            <Metric label="Time" value={`${activeRide.durationMin} min`} />
+            <Metric label="Fare" value={formatFare(activeRide.fare)} accent />
+          </div>
+        </AccordionSection>
 
         <div className="mt-4">
           {activeRide.status === "ACCEPTED" && (
@@ -449,6 +464,12 @@ export function DriverFlow({
       )}
 
       <Panel title={driver.fullName.split(" ")[0]} onExit={onExit}>
+      <AccordionSection
+        title="Driver status"
+        subtitle="Availability and vehicle"
+        defaultOpen
+        accent="green"
+      >
       <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 p-3">
         <div className="flex items-center gap-3">
           <span
@@ -482,9 +503,16 @@ export function DriverFlow({
           {isOnline ? "Go offline" : "Go online"}
         </button>
       </div>
+      </AccordionSection>
 
       {/* My location ------------------------------------------------------- */}
-      <div className="mt-3 rounded-2xl border border-white/10 bg-white/5 p-3">
+      <AccordionSection
+        title="My location"
+        subtitle="GPS or map-based positioning"
+        defaultOpen={!driver.location}
+        accent="blue"
+      >
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
         <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-white/45">
           <MapPin className="h-3.5 w-3.5 text-amber-400" />
           My location
@@ -520,13 +548,20 @@ export function DriverFlow({
           </p>
         )}
       </div>
+      </AccordionSection>
 
       {!isOnline ? (
         <p className="mt-4 rounded-xl border border-white/10 bg-white/5 px-3 py-4 text-center text-xs text-white/45">
           Go online to start receiving ride requests.
         </p>
       ) : (
-        <div className="mt-4">
+        <AccordionSection
+          title="Incoming requests"
+          subtitle="Nearby ride requests in real time"
+          defaultOpen
+          accent="amber"
+        >
+        <div>
           <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-white/45">
             <Navigation className="h-3.5 w-3.5 text-amber-400" />
             Incoming requests
@@ -578,6 +613,7 @@ export function DriverFlow({
             </ul>
           )}
         </div>
+        </AccordionSection>
       )}
 
       <button

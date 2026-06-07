@@ -1,6 +1,8 @@
 "use client";
 
-import { ArrowLeft } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowLeft, ChevronDown } from "lucide-react";
+import { Drawer } from "vaul";
 
 /** Floating glass panel shell used by both passenger and driver flows. */
 export function Panel({
@@ -12,8 +14,21 @@ export function Panel({
   onExit: () => void;
   children: React.ReactNode;
 }) {
-  return (
-    <div className="pointer-events-auto absolute left-1/2 top-[max(1rem,env(safe-area-inset-top))] z-[1000] max-h-[calc(100dvh-2rem)] w-[calc(100%-1.5rem)] max-w-sm -translate-x-1/2 overflow-y-auto overscroll-contain rounded-3xl border border-white/10 bg-zinc-900/85 p-4 shadow-2xl backdrop-blur-xl sm:left-4 sm:w-[calc(100%-2rem)] sm:translate-x-0">
+  const [isMobile, setIsMobile] = useState(false);
+  const snapPoints = [0.16, 0.42, 0.88];
+  const [snap, setSnap] = useState<number | string | null>(snapPoints[1]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const media = window.matchMedia("(max-width: 640px)");
+    const update = () => setIsMobile(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+
+  const content = (
+    <>
       <div className="mb-3 flex items-center justify-between">
         <button
           onClick={onExit}
@@ -24,8 +39,95 @@ export function Panel({
         <h2 className="text-sm font-bold text-white">{title}</h2>
         <span className="w-10" />
       </div>
-      {children}
+      <div className="space-y-3">{children}</div>
+    </>
+  );
+
+  if (isMobile) {
+    return (
+      <Drawer.Root
+        open
+        onOpenChange={(open) => !open && onExit()}
+        snapPoints={snapPoints}
+        activeSnapPoint={snap}
+        setActiveSnapPoint={setSnap}
+        modal={false}
+        noBodyStyles
+      >
+        <Drawer.Portal>
+          <Drawer.Content
+            className="pointer-events-auto fixed bottom-0 left-0 right-0 z-[1000] flex h-full max-h-[92dvh] flex-col rounded-t-[28px] border-t border-white/10 bg-zinc-950/92 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-24px_60px_rgba(0,0,0,0.42)] backdrop-blur-2xl"
+            aria-describedby={undefined}
+          >
+            <div className="mx-auto mb-3 h-1.5 w-14 rounded-full bg-white/15" />
+            <Drawer.Title className="sr-only">{title}</Drawer.Title>
+            <div className="scrollbar-thin flex-1 overflow-y-auto overscroll-contain pb-4">
+              {content}
+            </div>
+          </Drawer.Content>
+        </Drawer.Portal>
+      </Drawer.Root>
+    );
+  }
+
+  return (
+    <div className="pointer-events-auto absolute left-4 top-4 z-[1000] max-h-[calc(100dvh-2rem)] w-[min(24rem,calc(100%-2rem))] overflow-y-auto overscroll-contain rounded-[28px] border border-white/10 bg-zinc-950/85 p-4 shadow-2xl backdrop-blur-2xl">
+      {content}
     </div>
+  );
+}
+
+export function AccordionSection({
+  title,
+  subtitle,
+  defaultOpen = false,
+  accent,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  defaultOpen?: boolean;
+  accent?: "amber" | "green" | "blue";
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const accents = {
+    amber: "border-amber-400/20 bg-amber-500/[0.06]",
+    green: "border-emerald-400/20 bg-emerald-500/[0.05]",
+    blue: "border-sky-400/20 bg-sky-500/[0.05]",
+  } as const;
+
+  return (
+    <section
+      className={`overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] ${
+        accent ? accents[accent] : ""
+      }`}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-white/[0.03]"
+      >
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-bold text-white">{title}</p>
+          {subtitle && <p className="mt-0.5 text-xs text-white/45">{subtitle}</p>}
+        </div>
+        <ChevronDown
+          className={`h-4 w-4 shrink-0 text-white/45 transition-transform duration-200 ${
+            open ? "rotate-180" : "rotate-0"
+          }`}
+        />
+      </button>
+      <div
+        className={`grid transition-[grid-template-rows] duration-300 ease-out ${
+          open ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+        }`}
+      >
+        <div className="overflow-hidden">
+          <div className="border-t border-white/10 px-4 py-3">{children}</div>
+        </div>
+      </div>
+    </section>
   );
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Loader2, Wifi, WifiOff } from "lucide-react";
 import { LeafletMap } from "@/components/map/LeafletMap";
 import { LeafletTileLayer } from "@/components/map/LeafletTileLayer";
 import { useMapTileProvider } from "@/hooks/useMapTileProvider";
@@ -32,8 +33,7 @@ function readModeFromUrl(): TaxiMode | null {
 export function TaxiMain({ initialMode = null }: TaxiMainProps) {
   const [mode, setMode] = useState<TaxiMode | null>(initialMode);
   const [picking, setPicking] = useState(false);
-  const { tileProvider, currentProviderId, setProviderId } =
-    useMapTileProvider();
+  const { tileProvider } = useMapTileProvider();
   const map = useLeafletMap();
   const realtimeStatus = useRealtimeStatus();
 
@@ -100,10 +100,7 @@ export function TaxiMain({ initialMode = null }: TaxiMainProps) {
       </LeafletMap>
 
       {mode !== null && (
-        <TaxiMapControls
-          currentProviderId={currentProviderId}
-          onProviderChange={setProviderId}
-        />
+        <TaxiMapControls />
       )}
 
       {mode === null && <TaxiModeSelect onSelect={setMode} />}
@@ -123,30 +120,37 @@ export function TaxiMain({ initialMode = null }: TaxiMainProps) {
       )}
 
       {mode !== null && realtimeStatus !== "disabled" && (
-        <div className="pointer-events-none absolute right-3 top-3 z-[1000]">
+        <div className="pointer-events-none absolute right-20 top-[max(0.75rem,env(safe-area-inset-top))] z-[1000] sm:right-16">
           <span
-            className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold backdrop-blur ${
+            className={`flex h-9 w-9 items-center justify-center rounded-full border shadow-[0_10px_24px_rgba(0,0,0,0.22)] backdrop-blur-2xl ${
               realtimeStatus === "connected"
-                ? "bg-emerald-500/15 text-emerald-300"
+                ? "border-emerald-400/20 bg-zinc-900/55 text-emerald-300"
                 : realtimeStatus === "failed"
-                  ? "bg-red-500/15 text-red-300"
-                  : "bg-amber-500/15 text-amber-300"
+                  ? "border-red-400/20 bg-zinc-900/55 text-red-300"
+                  : "border-amber-400/20 bg-zinc-900/55 text-amber-300"
             }`}
+            aria-label={
+              realtimeStatus === "connected"
+                ? "Realtime connected"
+                : realtimeStatus === "failed"
+                  ? "Realtime offline"
+                  : "Realtime connecting"
+            }
+            title={
+              realtimeStatus === "connected"
+                ? "Realtime connected"
+                : realtimeStatus === "failed"
+                  ? "Realtime offline"
+                  : "Realtime connecting"
+            }
           >
-            <span
-              className={`h-1.5 w-1.5 rounded-full ${
-                realtimeStatus === "connected"
-                  ? "bg-emerald-400"
-                  : realtimeStatus === "failed"
-                    ? "bg-red-400"
-                    : "animate-pulse bg-amber-400"
-              }`}
-            />
-            {realtimeStatus === "connected"
-              ? "Live"
-              : realtimeStatus === "failed"
-                ? "Offline"
-                : "Connecting…"}
+              {realtimeStatus === "connected" ? (
+              <Wifi className="h-4 w-4 text-emerald-300" />
+              ) : realtimeStatus === "failed" ? (
+              <WifiOff className="h-4 w-4 text-red-300" />
+              ) : (
+              <Loader2 className="h-4 w-4 animate-spin text-amber-300" />
+              )}
           </span>
         </div>
       )}
