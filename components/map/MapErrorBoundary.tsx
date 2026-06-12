@@ -109,17 +109,17 @@ export class MapErrorBoundary extends Component<
 
             <div className="space-y-3">
               <button
-                onClick={this.handleReset}
+                onClick={() => window.location.reload()}
                 className="w-full px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors font-medium"
               >
-                Try Again
+                Reload Map
               </button>
 
               <button
-                onClick={() => (window.location.href = "/")}
+                onClick={this.handleReset}
                 className="w-full px-4 py-2 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-zinc-900 dark:text-zinc-100 rounded-lg transition-colors font-medium"
               >
-                Go Home
+                Try Again
               </button>
             </div>
 

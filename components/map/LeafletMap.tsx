@@ -43,6 +43,7 @@ export function LeafletMap({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMapInstance | null>(null);
   const isInitializedRef = useRef(false);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
 
   // Store initial values to prevent re-initialization on prop changes
   const initialCenterRef = useRef(center);
@@ -58,6 +59,10 @@ export function LeafletMap({
 
   // Memoized cleanup function
   const cleanupMap = useCallback(() => {
+    if (resizeObserverRef.current) {
+      resizeObserverRef.current.disconnect();
+      resizeObserverRef.current = null;
+    }
     if (mapRef.current) {
       try {
         mapRef.current.remove();
@@ -90,12 +95,23 @@ export function LeafletMap({
           return;
         }
 
-        // Ensure container has dimensions before initializing
-        const containerHeight = container.offsetHeight;
-        if (containerHeight === 0) {
-          // Retry after a short delay if container isn't ready
-          await new Promise((resolve) => setTimeout(resolve, 50));
-          if (!isMounted || isInitializedRef.current) return;
+        // Ensure the container actually has a size before initializing.
+        // On mobile (dvh units) and during route transitions the container can
+        // report 0x0 on first paint, which makes Leaflet compute an empty tile
+        // range and render a blank map until the page is refreshed. Poll across
+        // animation frames until it has a real height (or we give up).
+        let attempts = 0;
+        while (
+          isMounted &&
+          !isInitializedRef.current &&
+          container.offsetHeight === 0 &&
+          attempts < 60
+        ) {
+          await new Promise((resolve) => requestAnimationFrame(resolve));
+          attempts++;
+        }
+        if (!isMounted || isInitializedRef.current) {
+          return;
         }
 
         // Initialize Leaflet map with initial values
@@ -120,14 +136,25 @@ export function LeafletMap({
         // Register map with context
         setMap(map);
 
-        // Invalidate size after a brief delay to ensure proper tile rendering
-        requestAnimationFrame(() => {
-          if (mapRef.current && isMounted) {
-            setTimeout(() => {
-              mapRef.current?.invalidateSize();
-            }, 100);
-          }
-        });
+        // Keep the map correctly sized. A single invalidateSize() is not enough:
+        // the container height (dvh / flex layout) often settles AFTER the map is
+        // created, leaving tiles unloaded until a manual refresh. A ResizeObserver
+        // recomputes tiles whenever the container changes size (including the
+        // first 0 -> real-height transition), which is the reliable fix for the
+        // "blank map until refresh" bug.
+        const invalidate = () => mapRef.current?.invalidateSize({ animate: false });
+
+        if (typeof ResizeObserver !== "undefined") {
+          const observer = new ResizeObserver(() => invalidate());
+          observer.observe(container);
+          resizeObserverRef.current = observer;
+        }
+
+        // Belt-and-suspenders: a few delayed invalidations cover slow first
+        // paints on low-end devices where ResizeObserver may fire before layout.
+        requestAnimationFrame(invalidate);
+        setTimeout(invalidate, 200);
+        setTimeout(invalidate, 600);
       } catch (error) {
         if (isMounted) {
           console.error("Failed to initialize Leaflet map:", error);
