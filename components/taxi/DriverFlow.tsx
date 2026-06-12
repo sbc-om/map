@@ -262,11 +262,17 @@ export function DriverFlow({
 
     const phaseKey = `${rideId}:${rideStatus}`;
     if (simRef.current === phaseKey) return; // already animating this phase
-    const from = approach
-      ? driverLocRef.current ?? activeRide.pickup
-      : activeRide.pickup;
+
+    // Resume from the driver's CURRENT position over the REMAINING time, using
+    // the persisted phase start timestamp. This keeps the car moving smoothly
+    // after a page refresh instead of snapping back to the start of the route.
+    const startTs = approach
+      ? activeRide.acceptedAt ?? Date.now()
+      : activeRide.inProgressAt ?? Date.now();
+    const totalMs = approach ? DRIVER_APPROACH_MS : DRIVER_TRIP_MS;
+    const remainingMs = Math.max(1, totalMs - (Date.now() - startTs));
+    const from = driverLocRef.current ?? activeRide.pickup;
     const to = approach ? activeRide.pickup : activeRide.destination;
-    const durationMs = approach ? DRIVER_APPROACH_MS : DRIVER_TRIP_MS;
 
     simRef.current = phaseKey;
     let cancelled = false;
@@ -280,7 +286,7 @@ export function DriverFlow({
 
       const step = () => {
         if (cancelled) return;
-        const t = Math.min(1, (Date.now() - startedAt) / durationMs);
+        const t = Math.min(1, (Date.now() - startedAt) / remainingMs);
         updateDriverLocation(driverId, interpolateAlongPath(coords, t));
         if (t >= 1) {
           if (timer) clearInterval(timer);
@@ -319,7 +325,12 @@ export function DriverFlow({
 
   const advance = useCallback(
     (ride: RideRequest, status: RideRequest["status"]) => {
-      patchRide(ride.id, { status });
+      patchRide(ride.id, {
+        status,
+        // Stamp the trip start so the movement simulation can resume correctly
+        // (and at the right position) after a page refresh.
+        ...(status === "IN_PROGRESS" ? { inProgressAt: Date.now() } : {}),
+      });
       if (status === "COMPLETED" && driver) {
         releaseDriver(driver.id);
         toast.success("Trip completed");

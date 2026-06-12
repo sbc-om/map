@@ -47,6 +47,7 @@ export function createPassengerSession(
     id: id("psg"),
     fullName: fullName.trim(),
     mobile: mobile?.trim() || undefined,
+    activeRideId: null,
     createdAt: Date.now(),
   };
   write(TAXI_KEYS.passengerSession, session);
@@ -55,6 +56,19 @@ export function createPassengerSession(
 
 export function clearPassengerSession(): void {
   write<PassengerSession | null>(TAXI_KEYS.passengerSession, null);
+}
+
+/**
+ * Remember (or clear) the ride a passenger is currently following. Stored on the
+ * persisted passenger session so the active ride survives a page refresh.
+ */
+export function setPassengerActiveRide(rideId: string | null): void {
+  const current = read<PassengerSession | null>(
+    TAXI_KEYS.passengerSession,
+    null
+  );
+  if (!current) return;
+  write(TAXI_KEYS.passengerSession, { ...current, activeRideId: rideId });
 }
 
 export function createDriverSession(input: {

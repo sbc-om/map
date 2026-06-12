@@ -31,6 +31,7 @@ import {
   createPassengerSession,
   createRideRequest,
   releaseDriver,
+  setPassengerActiveRide,
   setRideStatus,
 } from "@/lib/taxi/actions";
 import { getRouteEstimate, reverseGeocode } from "@/lib/taxi/routing";
@@ -57,9 +58,12 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
   const [route, setRoute] = useState<RouteInfo | null>(null);
   const [routing, setRouting] = useState(false);
   const [pickTarget, setPickTarget] = useState<PickTarget>(null);
-  const [activeRideId, setActiveRideId] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+
+  // The active ride is tracked on the persisted passenger session, so a page
+  // refresh keeps the passenger in their ride instead of resetting to the planner.
+  const activeRideId = passenger?.activeRideId ?? null;
 
   const ride = useRide(activeRideId);
 
@@ -78,7 +82,7 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
       if (!cancelNotifiedRef.current) {
         cancelNotifiedRef.current = true;
         toast("The driver cancelled the ride");
-        setActiveRideId(null);
+        setPassengerActiveRide(null);
       }
     } else {
       cancelNotifiedRef.current = false;
@@ -154,14 +158,15 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
     );
   }, [applyPickup, taxiMap]);
 
-  // On first registration, request the pickup location automatically.
+  // On first registration, request the pickup location automatically — but not
+  // when returning to an active ride after a refresh (the pickup is already set).
   const autoLocatedRef = useRef(false);
   useEffect(() => {
-    if (passenger && !pickup && !autoLocatedRef.current) {
+    if (passenger && !pickup && !activeRideId && !autoLocatedRef.current) {
       autoLocatedRef.current = true;
       detectLocation();
     }
-  }, [passenger, pickup, detectLocation]);
+  }, [passenger, pickup, activeRideId, detectLocation]);
 
   // ── Map click handling for "pick on map" ───────────────────────────────────
   useEffect(() => {
@@ -184,6 +189,10 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
 
   // ── Compute route + fare whenever both endpoints are set ───────────────────
   useEffect(() => {
+    // Once a ride is active, its markers/route are owned by the ride effects
+    // below. Skip the planner drawing so it can't wipe them (e.g. after a
+    // refresh, when local pickup/destination state is empty).
+    if (activeRideId) return;
     if (!pickup || !destination) {
       setRoute(null);
       taxiMap.drawRoute(null);
@@ -212,7 +221,7 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
     return () => {
       cancelled = true;
     };
-  }, [pickup, destination, taxiMap]);
+  }, [pickup, destination, taxiMap, activeRideId]);
 
   const fare = useMemo(
     () => (route ? calculateFare(route.distance, route.duration) : null),
@@ -269,7 +278,20 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
     );
   }, [hasAssignedTaxi, assignedDriver, onlineDrivers, taxiMap]);
 
+  // Keep the pickup + destination markers in sync with the active ride. This
+  // also restores them after a page refresh, when the local pickup/destination
+  // state is empty but the ride is recovered from the persisted session.
+  useEffect(() => {
+    if (!ride || ride.status === "CANCELLED") return;
+    taxiMap.setPickup(ride.pickup, {
+      boarded: ride.status === "IN_PROGRESS",
+    });
+    taxiMap.setDestination(ride.destination);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run on id/status
+  }, [ride?.id, ride?.status, taxiMap]);
+
   // Draw the relevant route as the ride progresses:
+  //  • REQUESTED → trip path (pickup → destination) while waiting for a driver.
   //  • ACCEPTED  → approach path (taxi → pickup) so the passenger sees the car come.
   //  • IN_PROGRESS → trip path (pickup → destination).
   const drawnPhaseRef = useRef<string | null>(null);
@@ -277,6 +299,22 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
     if (!ride) return;
     const phase = `${ride.id}:${ride.status}`;
     if (drawnPhaseRef.current === phase) return;
+
+    if (ride.status === "REQUESTED") {
+      drawnPhaseRef.current = phase;
+      let cancelled = false;
+      (async () => {
+        try {
+          const r = await getRouteEstimate(ride.pickup, ride.destination);
+          if (!cancelled) taxiMap.drawRoute(r.coordinates, true);
+        } catch {
+          /* keep markers without a drawn trip route */
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
 
     if (ride.status === "ACCEPTED" && assignedDriver?.location) {
       drawnPhaseRef.current = phase;
@@ -298,9 +336,7 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
 
     if (ride.status === "IN_PROGRESS") {
       drawnPhaseRef.current = phase;
-      // Passenger is on board: drop the person glyph from the pickup pin while
-      // keeping the pin to mark the origin.
-      taxiMap.setPickup(ride.pickup, { boarded: true });
+      // (The pickup pin's boarded state is handled by the marker effect above.)
       let cancelled = false;
       (async () => {
         try {
@@ -322,7 +358,7 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
   const handleRequest = useCallback(() => {
     if (!passenger || !pickup || !destination || !route) return;
     const created = createRideRequest({ passenger, pickup, destination, route });
-    setActiveRideId(created.id);
+    setPassengerActiveRide(created.id);
     toast.success("Searching for a nearby driver…");
   }, [passenger, pickup, destination, route]);
 
@@ -330,12 +366,12 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
     if (!ride) return;
     setRideStatus(ride.id, "CANCELLED");
     if (ride.driverId) releaseDriver(ride.driverId);
-    setActiveRideId(null);
+    setPassengerActiveRide(null);
     toast("Ride cancelled");
   }, [ride]);
 
   const handleNewRide = useCallback(() => {
-    setActiveRideId(null);
+    setPassengerActiveRide(null);
     setDestination(null);
     setRoute(null);
     taxiMap.setDestination(null);

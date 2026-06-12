@@ -15,10 +15,6 @@ import { TaxiMapControls } from "./TaxiMapControls";
 import { DEFAULT_PICKUP } from "@/constants/taxi-config";
 import type { TaxiMode } from "@/types/taxi";
 
-interface TaxiMainProps {
-  initialMode?: TaxiMode | null;
-}
-
 /** Read a preselected mode from the URL query (`?mode=passenger|driver`). */
 function readModeFromUrl(): TaxiMode | null {
   if (typeof window === "undefined") return null;
@@ -30,12 +26,24 @@ function readModeFromUrl(): TaxiMode | null {
  * Root of the taxi dispatch experience. Renders the shared Leaflet map and
  * overlays either the mode selector, the passenger flow, or the driver flow.
  */
-export function TaxiMain({ initialMode = null }: TaxiMainProps) {
-  const [mode, setMode] = useState<TaxiMode | null>(initialMode);
+const MODE_STORAGE_KEY = "omantaxi:mode";
+
+export function TaxiMain() {
+  const [mode, setModeState] = useState<TaxiMode | null>(null);
   const [picking, setPicking] = useState(false);
   const { tileProvider } = useMapTileProvider();
   const map = useLeafletMap();
   const realtimeStatus = useRealtimeStatus();
+
+  // The role is kept in sessionStorage: it survives a refresh of THIS tab (so an
+  // active ride is not lost) while staying independent per tab (so a passenger
+  // tab and a driver tab in the same browser don't overwrite each other).
+  const setMode = useCallback((m: TaxiMode | null) => {
+    setModeState(m);
+    if (typeof window === "undefined") return;
+    if (m) window.sessionStorage.setItem(MODE_STORAGE_KEY, m);
+    else window.sessionStorage.removeItem(MODE_STORAGE_KEY);
+  }, []);
 
   // Connect the cross-device realtime transport (Ably) once on mount. No-op
   // when NEXT_PUBLIC_ABLY_KEY is unset (falls back to same-browser sync).
@@ -43,16 +51,19 @@ export function TaxiMain({ initialMode = null }: TaxiMainProps) {
     void initRealtime();
   }, []);
 
-  // Preselect the role from the URL after mount (avoids hydration mismatch
-  // since the page is statically prerendered with no mode).
-  const appliedUrlModeRef = useRef(false);
+  // Restore the role after mount: an explicit ?mode= in the URL wins (e.g.
+  // arriving from the landing page), otherwise fall back to the persisted role.
+  const appliedModeRef = useRef(false);
   useEffect(() => {
-    if (appliedUrlModeRef.current) return;
-    appliedUrlModeRef.current = true;
+    if (appliedModeRef.current) return;
+    appliedModeRef.current = true;
     const urlMode = readModeFromUrl();
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync role from URL after mount
-    if (urlMode) setMode(urlMode);
-  }, []);
+    const saved = window.sessionStorage.getItem(MODE_STORAGE_KEY);
+    const restored =
+      urlMode ?? (saved === "passenger" || saved === "driver" ? saved : null);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- restore role after mount
+    if (restored) setMode(restored);
+  }, [setMode]);
 
   // Allow the active flow to subscribe to map clicks (for "pick on map").
   const clickHandlerRef = useRef<((lat: number, lng: number) => void) | null>(
@@ -79,7 +90,7 @@ export function TaxiMain({ initialMode = null }: TaxiMainProps) {
     };
   }, [map]);
 
-  const exitToSelect = useCallback(() => setMode(null), []);
+  const exitToSelect = useCallback(() => setMode(null), [setMode]);
 
   return (
     <div className="relative h-dvh-screen w-full overflow-hidden bg-zinc-950">

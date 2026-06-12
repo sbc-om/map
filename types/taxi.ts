@@ -37,6 +37,8 @@ export interface PassengerSession {
   id: string;
   fullName: string;
   mobile?: string;
+  /** Id of the ride the passenger is currently following (survives refresh). */
+  activeRideId?: string | null;
   createdAt: number;
 }
 
@@ -99,6 +101,8 @@ export interface RideRequest {
   vehicleNumber: string | null;
   /** When a driver accepted the ride (used for the approach ETA countdown) */
   acceptedAt?: number;
+  /** When the trip started (pickup → destination); used to resume after refresh */
+  inProgressAt?: number;
   createdAt: number;
   updatedAt: number;
 }
