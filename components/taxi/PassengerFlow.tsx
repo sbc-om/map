@@ -24,6 +24,7 @@ import {
   SmallButton,
   TextInput,
 } from "./ui";
+import { RideChat } from "./RideChat";
 import { useTaxiMap } from "@/hooks/useTaxiMap";
 import { useDrivers, usePassengerSession, useRide } from "@/hooks/useTaxiStore";
 import {
@@ -67,6 +68,21 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
     if (ride?.status !== "ACCEPTED") return;
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
+  }, [ride?.status]);
+
+  // If the driver cancels before the trip starts, let the passenger know and
+  // return them to the trip planner.
+  const cancelNotifiedRef = useRef(false);
+  useEffect(() => {
+    if (ride?.status === "CANCELLED") {
+      if (!cancelNotifiedRef.current) {
+        cancelNotifiedRef.current = true;
+        toast("The driver cancelled the ride");
+        setActiveRideId(null);
+      }
+    } else {
+      cancelNotifiedRef.current = false;
+    }
   }, [ride?.status]);
 
   // ── Registration form state ────────────────────────────────────────────────
@@ -399,6 +415,24 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
           </AccordionSection>
         )}
 
+        {assignedDriver && ride.status !== "REQUESTED" && (
+          <AccordionSection
+            title="Message driver"
+            subtitle="Chat or call your driver"
+            defaultOpen
+            accent="blue"
+          >
+            <RideChat
+              rideId={ride.id}
+              sender="passenger"
+              senderName={passenger.fullName}
+              peerName={assignedDriver.fullName}
+              peerMobile={ride.driverMobile}
+              disabled={ride.status === "COMPLETED"}
+            />
+          </AccordionSection>
+        )}
+
         <AccordionSection
           title="Trip details"
           subtitle="Pickup, destination, and fare"
@@ -424,6 +458,11 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
           >
             Book another ride
           </button>
+        ) : ride.status === "IN_PROGRESS" ? (
+          // Once the trip is underway it can no longer be cancelled.
+          <p className="mt-4 rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-center text-xs text-white/45">
+            Trip in progress — enjoy your ride.
+          </p>
         ) : (
           <button
             onClick={handleCancelRide}

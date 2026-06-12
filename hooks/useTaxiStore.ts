@@ -5,7 +5,7 @@
  * Each hook subscribes to a single storage key and returns a stable snapshot.
  */
 
-import { useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { read, subscribe, TAXI_KEYS } from "@/lib/taxi/store";
 import {
   getRealtimeStatus,
@@ -13,6 +13,7 @@ import {
   type RealtimeStatus,
 } from "@/lib/taxi/realtime";
 import type {
+  ChatMessage,
   DriverSession,
   PassengerSession,
   RideRequest,
@@ -20,9 +21,12 @@ import type {
 
 type DriverMap = Record<string, DriverSession>;
 type RideMap = Record<string, RideRequest>;
+type MessageMap = Record<string, ChatMessage>;
 
 const EMPTY_DRIVERS: DriverMap = {};
 const EMPTY_RIDES: RideMap = {};
+const EMPTY_MESSAGES: MessageMap = {};
+const EMPTY_MESSAGE_LIST: ChatMessage[] = [];
 
 function useStoreValue<T>(key: string, fallback: T): T {
   return useSyncExternalStore(
@@ -59,6 +63,20 @@ export function useDriverSession(): DriverSession | null {
 export function useRide(rideId: string | null): RideRequest | null {
   const rides = useRides();
   return rideId ? rides[rideId] ?? null : null;
+}
+
+/** Chat messages for a single ride, sorted oldest-first and reactive. */
+export function useMessages(rideId: string | null): ChatMessage[] {
+  const messages = useStoreValue<MessageMap>(
+    TAXI_KEYS.messages,
+    EMPTY_MESSAGES
+  );
+  return useMemo(() => {
+    if (!rideId) return EMPTY_MESSAGE_LIST;
+    return Object.values(messages)
+      .filter((m) => m.rideId === rideId)
+      .sort((a, b) => a.createdAt - b.createdAt);
+  }, [messages, rideId]);
 }
 
 /** Live status of the cross-device realtime connection. */

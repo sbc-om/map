@@ -21,14 +21,16 @@
 
 import type { RealtimeChannel, InboundMessage } from "ably";
 import { read, write, TAXI_KEYS } from "./store";
-import type { DriverSession, RideRequest } from "@/types/taxi";
+import type { ChatMessage, DriverSession, RideRequest } from "@/types/taxi";
 
 type DriverMap = Record<string, DriverSession>;
 type RideMap = Record<string, RideRequest>;
+type MessageMap = Record<string, ChatMessage>;
 
 const ABLY_KEY = process.env.NEXT_PUBLIC_ABLY_KEY ?? "";
 const DRIVERS_CHANNEL = "omantaxi:drivers";
 const RIDES_CHANNEL = "omantaxi:rides";
+const MESSAGES_CHANNEL = "omantaxi:messages";
 const HISTORY_LIMIT = 100;
 
 export type RealtimeStatus =
@@ -42,6 +44,7 @@ let initStarted = false;
 let enabled = false;
 let driversChannel: RealtimeChannel | null = null;
 let ridesChannel: RealtimeChannel | null = null;
+let messagesChannel: RealtimeChannel | null = null;
 
 const statusListeners = new Set<() => void>();
 
@@ -91,6 +94,14 @@ function mergeRemoteRide(ride: RideRequest | undefined): void {
   write(TAXI_KEYS.rides, { ...prev, [ride.id]: ride });
 }
 
+function mergeRemoteMessage(message: ChatMessage | undefined): void {
+  if (!message || typeof message.id !== "string") return;
+  const prev = read<MessageMap>(TAXI_KEYS.messages, {});
+  // Messages are immutable once sent, so a present id means we already have it.
+  if (prev[message.id]) return;
+  write(TAXI_KEYS.messages, { ...prev, [message.id]: message });
+}
+
 function applyDriverMessage(msg: InboundMessage): void {
   if (msg.name === "remove") {
     removeRemoteDriver((msg.data as { id?: string } | undefined)?.id);
@@ -101,6 +112,10 @@ function applyDriverMessage(msg: InboundMessage): void {
 
 function applyRideMessage(msg: InboundMessage): void {
   mergeRemoteRide(msg.data as RideRequest | undefined);
+}
+
+function applyChatMessage(msg: InboundMessage): void {
+  mergeRemoteMessage(msg.data as ChatMessage | undefined);
 }
 
 async function hydrateFromHistory(
@@ -157,9 +172,11 @@ export async function initRealtime(): Promise<void> {
 
     driversChannel = client.channels.get(DRIVERS_CHANNEL);
     ridesChannel = client.channels.get(RIDES_CHANNEL);
+    messagesChannel = client.channels.get(MESSAGES_CHANNEL);
 
     driversChannel.subscribe(applyDriverMessage);
     ridesChannel.subscribe(applyRideMessage);
+    messagesChannel.subscribe(applyChatMessage);
 
     enabled = true;
 
@@ -167,6 +184,7 @@ export async function initRealtime(): Promise<void> {
     await Promise.all([
       hydrateFromHistory(driversChannel, applyDriverMessage),
       hydrateFromHistory(ridesChannel, applyRideMessage),
+      hydrateFromHistory(messagesChannel, applyChatMessage),
     ]);
   } catch (err) {
     setStatus("failed");
@@ -190,4 +208,9 @@ export function publishDriverRemoved(driverId: string): void {
 export function publishRide(ride: RideRequest): void {
   if (!enabled || !ridesChannel) return;
   ridesChannel.publish("update", ride).catch(() => {});
+}
+
+export function publishMessage(message: ChatMessage): void {
+  if (!enabled || !messagesChannel) return;
+  messagesChannel.publish("new", message).catch(() => {});
 }

@@ -15,6 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://map.sbc.om"),
   title: "SBCMap | Enterprise Geospatial Platform",
   description:
     "High-precision interactive mapping platform for Oman and beyond. Real-time geospatial visualization, POI management, and enterprise-grade navigation tools.",

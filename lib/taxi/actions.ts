@@ -7,9 +7,16 @@
  */
 
 import { read, write, update, TAXI_KEYS } from "./store";
-import { publishDriver, publishDriverRemoved, publishRide } from "./realtime";
+import {
+  publishDriver,
+  publishDriverRemoved,
+  publishMessage,
+  publishRide,
+} from "./realtime";
 import { calculateFare } from "./fare";
 import type {
+  ChatMessage,
+  ChatSender,
   DriverSession,
   LatLng,
   PassengerSession,
@@ -22,6 +29,7 @@ import type {
 
 type DriverMap = Record<string, DriverSession>;
 type RideMap = Record<string, RideRequest>;
+type MessageMap = Record<string, ChatMessage>;
 
 function id(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random()
@@ -51,12 +59,14 @@ export function clearPassengerSession(): void {
 
 export function createDriverSession(input: {
   fullName: string;
+  mobile?: string;
   vehicleType: VehicleType;
   vehicleNumber: string;
 }): DriverSession {
   const session: DriverSession = {
     id: id("drv"),
     fullName: input.fullName.trim(),
+    mobile: input.mobile?.trim() || undefined,
     vehicleType: input.vehicleType,
     vehicleNumber: input.vehicleNumber.trim().toUpperCase(),
     status: "OFFLINE",
@@ -204,6 +214,7 @@ export function acceptRide(
     status: "ACCEPTED",
     driverId: driver.id,
     driverName: driver.fullName,
+    driverMobile: driver.mobile ?? null,
     vehicleType: driver.vehicleType,
     vehicleNumber: driver.vehicleNumber,
     acceptedAt: Date.now(),
@@ -222,4 +233,37 @@ export function releaseDriver(driverId: string): void {
 
 export function getRides(): RideMap {
   return read<RideMap>(TAXI_KEYS.rides, {});
+}
+
+// ─── Chat messages ─────────────────────────────────────────────────────────────
+
+/** Send a chat message within a ride from the passenger or the driver. */
+export function sendMessage(input: {
+  rideId: string;
+  sender: ChatSender;
+  senderName: string;
+  text: string;
+}): ChatMessage | null {
+  const text = input.text.trim();
+  if (!text) return null;
+
+  const message: ChatMessage = {
+    id: id("msg"),
+    rideId: input.rideId,
+    sender: input.sender,
+    senderName: input.senderName,
+    text,
+    createdAt: Date.now(),
+  };
+
+  update<MessageMap>(TAXI_KEYS.messages, {}, (prev) => ({
+    ...prev,
+    [message.id]: message,
+  }));
+  publishMessage(message);
+  return message;
+}
+
+export function getMessages(): MessageMap {
+  return read<MessageMap>(TAXI_KEYS.messages, {});
 }

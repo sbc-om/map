@@ -118,6 +118,7 @@ function ensureStorageListener(): void {
 export const TAXI_KEYS = {
   drivers: "drivers",
   rides: "rides",
+  messages: "messages",
   passengerSession: "passenger-session",
   driverSession: "driver-session",
 } as const;

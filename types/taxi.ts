@@ -44,6 +44,7 @@ export interface PassengerSession {
 export interface DriverSession {
   id: string;
   fullName: string;
+  mobile?: string;
   vehicleType: VehicleType;
   vehicleNumber: string;
   status: DriverStatus;
@@ -93,10 +94,24 @@ export interface RideRequest {
   status: RideStatus;
   driverId: string | null;
   driverName: string | null;
+  driverMobile?: string | null;
   vehicleType: VehicleType | null;
   vehicleNumber: string | null;
   /** When a driver accepted the ride (used for the approach ETA countdown) */
   acceptedAt?: number;
   createdAt: number;
   updatedAt: number;
+}
+
+/** Who sent a chat message within a ride */
+export type ChatSender = "passenger" | "driver";
+
+/** A single chat message exchanged between the passenger and the driver */
+export interface ChatMessage {
+  id: string;
+  rideId: string;
+  sender: ChatSender;
+  senderName: string;
+  text: string;
+  createdAt: number;
 }

@@ -24,6 +24,7 @@ import {
   RideLine,
   TextInput,
 } from "./ui";
+import { RideChat } from "./RideChat";
 import { useTaxiMap } from "@/hooks/useTaxiMap";
 import { useDriverTracking } from "@/hooks/useDriverTracking";
 import { useDriverSession, useRides } from "@/hooks/useTaxiStore";
@@ -79,6 +80,7 @@ export function DriverFlow({
 
   // ── Registration ───────────────────────────────────────────────────────────
   const [fullName, setFullName] = useState("");
+  const [mobile, setMobile] = useState("");
   const [vehicleType, setVehicleType] = useState<VehicleType>("taxi");
   const [vehicleNumber, setVehicleNumber] = useState("");
 
@@ -93,10 +95,10 @@ export function DriverFlow({
         toast.error("Please enter your vehicle number");
         return;
       }
-      createDriverSession({ fullName, vehicleType, vehicleNumber });
+      createDriverSession({ fullName, mobile, vehicleType, vehicleNumber });
       toast.success("Driver profile created");
     },
-    [fullName, vehicleType, vehicleNumber]
+    [fullName, mobile, vehicleType, vehicleNumber]
   );
 
   // ── Online / offline toggle ────────────────────────────────────────────────
@@ -326,6 +328,18 @@ export function DriverFlow({
     [driver]
   );
 
+  // Cancel is only allowed before the trip starts (ACCEPTED / ARRIVED). Once a
+  // ride is IN_PROGRESS the passenger is on board and it can't be cancelled.
+  const handleCancelRide = useCallback(
+    (ride: RideRequest) => {
+      if (!driver) return;
+      patchRide(ride.id, { status: "CANCELLED" });
+      releaseDriver(driver.id);
+      toast("Ride cancelled");
+    },
+    [driver]
+  );
+
   // ─────────────────────────────────────────────────────────────────────────
   // Registration gate
   // ─────────────────────────────────────────────────────────────────────────
@@ -338,6 +352,14 @@ export function DriverFlow({
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               placeholder="e.g. Salim Al Hinai"
+            />
+          </Field>
+          <Field label="Mobile number (so passengers can call you)">
+            <TextInput
+              value={mobile}
+              onChange={(e) => setMobile(e.target.value)}
+              inputMode="tel"
+              placeholder="+968 …"
             />
           </Field>
           <Field label="Vehicle type">
@@ -424,6 +446,21 @@ export function DriverFlow({
           </div>
         </AccordionSection>
 
+        <AccordionSection
+          title="Message passenger"
+          subtitle="Chat or call your passenger"
+          defaultOpen
+          accent="blue"
+        >
+          <RideChat
+            rideId={activeRide.id}
+            sender="driver"
+            senderName={driver.fullName}
+            peerName={activeRide.passengerName}
+            peerMobile={activeRide.passengerMobile}
+          />
+        </AccordionSection>
+
         <div className="mt-4">
           {activeRide.status === "ACCEPTED" && (
             <PrimaryButton onClick={() => advance(activeRide, "ARRIVED")}>
@@ -439,6 +476,17 @@ export function DriverFlow({
             <PrimaryButton onClick={() => advance(activeRide, "COMPLETED")}>
               Complete trip
             </PrimaryButton>
+          )}
+
+          {/* Cancel is only available before the trip starts. */}
+          {(activeRide.status === "ACCEPTED" ||
+            activeRide.status === "ARRIVED") && (
+            <button
+              onClick={() => handleCancelRide(activeRide)}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 py-3 text-sm font-bold text-red-300 transition hover:bg-red-500/20"
+            >
+              <X className="h-4 w-4" /> Cancel ride
+            </button>
           )}
         </div>
       </Panel>
