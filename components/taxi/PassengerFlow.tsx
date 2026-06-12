@@ -274,11 +274,16 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
 
     if (ride.status === "IN_PROGRESS") {
       drawnPhaseRef.current = phase;
+      // Passenger is on board: drop the person glyph from the pickup pin while
+      // keeping the pin to mark the origin.
+      taxiMap.setPickup(ride.pickup, { boarded: true });
       let cancelled = false;
       (async () => {
         try {
           const r = await getRouteEstimate(ride.pickup, ride.destination);
-          if (!cancelled) taxiMap.drawRoute(r.coordinates, false);
+          // Fit the view to the full trip so the passenger actually sees the
+          // pickup -> destination route (the driver already fits to it).
+          if (!cancelled) taxiMap.drawRoute(r.coordinates, true);
         } catch {
           /* keep markers without a drawn trip route */
         }

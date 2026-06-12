@@ -214,7 +214,11 @@ export function DriverFlow({
       taxiMap.setDestination(null);
       return;
     }
-    taxiMap.setPickup(activeRide.pickup);
+    // Once the trip starts the passenger is in the car, so drop the person
+    // glyph from the pickup pin (keep the pin to mark the origin).
+    taxiMap.setPickup(activeRide.pickup, {
+      boarded: activeRide.status === "IN_PROGRESS",
+    });
     taxiMap.setDestination(activeRide.destination);
     let cancelled = false;
     (async () => {

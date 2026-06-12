@@ -134,7 +134,15 @@ export function useTaxiMap() {
   const setPickup = useCallback(
     async (
       point: LatLng | null,
-      opts?: { draggable?: boolean; onDragEnd?: (p: LatLng) => void }
+      opts?: {
+        draggable?: boolean;
+        onDragEnd?: (p: LatLng) => void;
+        /**
+         * Once the passenger is on board, drop the person glyph but keep the
+         * pickup pin so the origin stays marked on the map.
+         */
+        boarded?: boolean;
+      }
     ) => {
       const L = await ensureL();
       if (!map || !L) return;
@@ -143,7 +151,7 @@ export function useTaxiMap() {
       if (!point) return;
 
       const marker = L.marker([point.lat, point.lng], {
-        icon: pinIcon(L, "#22c55e", "🧍"),
+        icon: pinIcon(L, "#22c55e", opts?.boarded ? "" : "🧍"),
         draggable: opts?.draggable ?? false,
         zIndexOffset: 800,
       }).addTo(map);
