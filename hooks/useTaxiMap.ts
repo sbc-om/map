@@ -59,9 +59,19 @@ function applyMarkerHeading(marker: Marker, heading: number) {
   const body = element.querySelector<HTMLElement>(".taxi-car-marker__body");
   if (!body) return;
 
-  // The taxi emoji faces right/east at 0deg, while geographic bearing uses
-  // north=0. Convert bearing to the emoji's native orientation.
-  body.style.transform = `translateZ(0) rotate(${heading - 90}deg)`;
+  // The 🚕 emoji is a side view whose front points LEFT (west) by default, and
+  // `heading` is a geographic bearing (north=0, east=90, clockwise). To keep the
+  // car upright (never upside down) while its FRONT points toward the travel
+  // direction:
+  //   • heading east  (0–180°) → mirror horizontally so it faces right, then tilt
+  //   • heading west (180–360°) → keep it facing left, then tilt
+  // The horizontal flip happens at due north/south, where the car is vertical
+  // and the flip is least noticeable.
+  const h = ((heading % 360) + 360) % 360;
+  const headingEast = h > 0 && h < 180;
+  body.style.transform = headingEast
+    ? `translateZ(0) scaleX(-1) rotate(${90 - h}deg)`
+    : `translateZ(0) rotate(${h - 270}deg)`;
 }
 
 function pinIcon(L: LType, color: string, glyph: string) {
