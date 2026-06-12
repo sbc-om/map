@@ -90,7 +90,7 @@ function pinIcon(L: LType, color: string, glyph: string) {
   });
 }
 
-function carIcon(L: LType) {
+function carIcon(L: LType, emoji = "🚕") {
   return L.divIcon({
     className: "taxi-car-marker",
     html: `<div class="taxi-car-marker__body" style="
@@ -108,7 +108,7 @@ function carIcon(L: LType) {
         line-height:1;
         transform:translateY(1px);
         text-shadow:0 1px 0 rgba(255,255,255,0.4);
-      ">🚕</span>
+      ">${emoji}</span>
     </div>`,
     iconSize: [46, 46],
     iconAnchor: [23, 23],
@@ -124,8 +124,10 @@ export function useTaxiMap() {
   const routeRef = useRef<LayerGroup | null>(null);
   const driversRef = useRef<Map<string, Marker>>(new Map());
   const driverMotionRef = useRef<Map<string, MarkerMotion>>(new Map());
+  const markerEmojiRef = useRef<Map<string, string>>(new Map());
   const selfRef = useRef<Marker | null>(null);
   const selfMotionRef = useRef<MarkerMotion | null>(null);
+  const selfEmojiRef = useRef<string | null>(null);
 
   const ensureL = useCallback(async (): Promise<LType | null> => {
     if (lRef.current) return lRef.current;
@@ -237,7 +239,9 @@ export function useTaxiMap() {
 
   /** Render/update a set of driver pins keyed by driver id. */
   const setDrivers = useCallback(
-    async (drivers: Array<{ id: string; location: LatLng }>) => {
+    async (
+      drivers: Array<{ id: string; location: LatLng; emoji?: string }>
+    ) => {
       const L = await ensureL();
       if (!map || !L) return;
 
@@ -248,6 +252,7 @@ export function useTaxiMap() {
           marker.remove();
           driversRef.current.delete(driverId);
           driverMotionRef.current.delete(driverId);
+          markerEmojiRef.current.delete(driverId);
         }
       }
       // Add or move current markers
@@ -260,12 +265,19 @@ export function useTaxiMap() {
 
         if (existing) {
           existing.setLatLng([d.location.lat, d.location.lng]);
+          // Keep the icon in sync with the driver's chosen vehicle type.
+          const emoji = d.emoji ?? "🚕";
+          if (markerEmojiRef.current.get(d.id) !== emoji) {
+            existing.setIcon(carIcon(L, emoji));
+            markerEmojiRef.current.set(d.id, emoji);
+          }
           applyMarkerHeading(existing, nextHeading);
         } else {
           const marker = L.marker([d.location.lat, d.location.lng], {
-            icon: carIcon(L),
+            icon: carIcon(L, d.emoji),
             zIndexOffset: 600,
           }).addTo(map);
+          markerEmojiRef.current.set(d.id, d.emoji ?? "🚕");
           applyMarkerHeading(marker, nextHeading);
           driversRef.current.set(d.id, marker);
         }
@@ -286,30 +298,38 @@ export function useTaxiMap() {
   const setSelfDriver = useCallback(
     async (
       point: LatLng | null,
-      opts?: { draggable?: boolean; onDragEnd?: (p: LatLng) => void }
+      opts?: { draggable?: boolean; onDragEnd?: (p: LatLng) => void; emoji?: string }
     ) => {
       const L = await ensureL();
       if (!map || !L) return;
       if (!point) {
         selfRef.current?.remove();
         selfRef.current = null;
+        selfEmojiRef.current = null;
         return;
       }
+      const emoji = opts?.emoji ?? "🚕";
       const existing = selfRef.current;
       const nextHeading = movementHeading(selfMotionRef.current ?? undefined, point);
       if (existing) {
         existing.setLatLng([point.lat, point.lng]);
         if (opts?.draggable) existing.dragging?.enable();
         else existing.dragging?.disable();
+        // Keep the icon in sync with the driver's chosen vehicle type.
+        if (selfEmojiRef.current !== emoji) {
+          existing.setIcon(carIcon(L, emoji));
+          selfEmojiRef.current = emoji;
+        }
         applyMarkerHeading(existing, nextHeading);
         selfMotionRef.current = { location: point, heading: nextHeading };
         return;
       }
       const marker = L.marker([point.lat, point.lng], {
-        icon: carIcon(L),
+        icon: carIcon(L, emoji),
         draggable: opts?.draggable ?? false,
         zIndexOffset: 1000,
       }).addTo(map);
+      selfEmojiRef.current = emoji;
       applyMarkerHeading(marker, nextHeading);
       if (opts?.draggable && opts.onDragEnd) {
         marker.on("dragend", () => {
@@ -333,9 +353,11 @@ export function useTaxiMap() {
     selfRef.current?.remove();
     selfRef.current = null;
     selfMotionRef.current = null;
+    selfEmojiRef.current = null;
     driversRef.current.forEach((m) => m.remove());
     driversRef.current.clear();
     driverMotionRef.current.clear();
+    markerEmojiRef.current.clear();
   }, []);
 
   // Clean up all layers on unmount.

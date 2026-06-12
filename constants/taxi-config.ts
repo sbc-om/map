@@ -43,6 +43,11 @@ export const VEHICLE_TYPES: Record<
   VehicleType,
   { label: string; description: string; emoji: string }
 > = {
+  taxi: {
+    label: "Taxi",
+    description: "Classic metered taxi",
+    emoji: "🚕",
+  },
   economy: {
     label: "Economy",
     description: "Affordable everyday rides",

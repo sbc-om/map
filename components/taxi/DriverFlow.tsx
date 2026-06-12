@@ -79,7 +79,7 @@ export function DriverFlow({
 
   // ── Registration ───────────────────────────────────────────────────────────
   const [fullName, setFullName] = useState("");
-  const [vehicleType, setVehicleType] = useState<VehicleType>("economy");
+  const [vehicleType, setVehicleType] = useState<VehicleType>("taxi");
   const [vehicleNumber, setVehicleNumber] = useState("");
 
   const handleRegister = useCallback(
@@ -167,6 +167,7 @@ export function DriverFlow({
     taxiMap.setSelfDriver(driver.location, {
       draggable: true,
       onDragEnd: (p) => updateDriverLocation(driver.id, p),
+      emoji: VEHICLE_TYPES[driver.vehicleType].emoji,
     });
   }, [driver, taxiMap]);
 

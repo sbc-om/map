@@ -30,7 +30,7 @@ export type RideStatus =
 export type DriverStatus = "OFFLINE" | "ONLINE" | "ON_TRIP";
 
 /** Vehicle category */
-export type VehicleType = "economy" | "comfort" | "xl" | "bike";
+export type VehicleType = "taxi" | "economy" | "comfort" | "xl" | "bike";
 
 /** Passenger session stored locally (no auth for MVP) */
 export interface PassengerSession {

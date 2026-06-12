@@ -236,12 +236,20 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
   useEffect(() => {
     if (hasAssignedTaxi && assignedDriver?.location) {
       taxiMap.setDrivers([
-        { id: assignedDriver.id, location: assignedDriver.location },
+        {
+          id: assignedDriver.id,
+          location: assignedDriver.location,
+          emoji: VEHICLE_TYPES[assignedDriver.vehicleType].emoji,
+        },
       ]);
       return;
     }
     taxiMap.setDrivers(
-      onlineDrivers.map((d) => ({ id: d.id, location: d.location! }))
+      onlineDrivers.map((d) => ({
+        id: d.id,
+        location: d.location!,
+        emoji: VEHICLE_TYPES[d.vehicleType].emoji,
+      }))
     );
   }, [hasAssignedTaxi, assignedDriver, onlineDrivers, taxiMap]);
 
