@@ -74,6 +74,16 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
     return () => clearInterval(t);
   }, [ride?.status]);
 
+  // Drop a stale active-ride pointer (e.g. the ride was cleared or aged out of
+  // the store). Otherwise the planner stays blocked and the passenger can never
+  // request a new taxi, because the route/fare effect below skips while a ride
+  // id is set.
+  useEffect(() => {
+    if (activeRideId && !ride) {
+      setPassengerActiveRide(null);
+    }
+  }, [activeRideId, ride]);
+
   // If the driver cancels before the trip starts, let the passenger know and
   // return them to the trip planner.
   const cancelNotifiedRef = useRef(false);
@@ -324,7 +334,10 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
       (async () => {
         try {
           const r = await getRouteEstimate(from, to);
-          if (!cancelled) taxiMap.drawRoute(r.coordinates, false);
+          // Fit the view to the approach path so the passenger sees the taxi
+          // heading over — and so the route is on-screen after a page refresh
+          // (the map otherwise reloads centred on its default location).
+          if (!cancelled) taxiMap.drawRoute(r.coordinates, true);
         } catch {
           /* keep markers without a drawn approach route */
         }
