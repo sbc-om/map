@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { MapPin } from "lucide-react";
+import Image from "next/image";
 
 function GithubSvg({ className }: { className?: string }) {
   return (
@@ -19,9 +19,14 @@ export function Navbar() {
       <div className="mx-auto flex max-w-7xl items-center justify-between">
         {/* Logo */}
         <Link href="/" className="group flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 shadow-lg shadow-amber-500/20 transition-all duration-300 group-hover:shadow-amber-500/40 group-hover:scale-105">
-            <MapPin className="h-[18px] w-[18px] text-black" strokeWidth={2.5} />
-          </div>
+          <Image
+            src="/sbc.svg"
+            alt="SBCMap logo"
+            width={36}
+            height={36}
+            priority
+            className="h-9 w-9 drop-shadow-lg transition-transform duration-300 group-hover:scale-105"
+          />
           <span className="text-lg font-bold text-white tracking-tight">
             SBC<span className="text-amber-400">Map</span>
           </span>

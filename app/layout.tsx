@@ -19,11 +19,17 @@ export const metadata: Metadata = {
   description:
     "High-precision interactive mapping platform for Oman and beyond. Real-time geospatial visualization, POI management, and enterprise-grade navigation tools.",
   keywords: ["mapping", "geospatial", "Oman", "interactive map", "POI", "satellite"],
+  icons: {
+    icon: [{ url: "/sbc.svg", type: "image/svg+xml" }],
+    shortcut: "/sbc.svg",
+    apple: "/sbc.svg",
+  },
   openGraph: {
     title: "SBCMap | Enterprise Geospatial Platform",
     description:
       "High-precision interactive mapping platform for Oman and beyond.",
     type: "website",
+    images: [{ url: "/sbc.svg" }],
   },
 };
 
