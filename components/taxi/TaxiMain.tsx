@@ -2,10 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, Wifi, WifiOff } from "lucide-react";
-import { LeafletMap } from "@/components/map/LeafletMap";
-import { LeafletTileLayer } from "@/components/map/LeafletTileLayer";
-import { useMapTileProvider } from "@/hooks/useMapTileProvider";
-import { useLeafletMap } from "@/hooks/useLeafletMap";
+import { MapView } from "@/components/map/MapView";
+import { useMapStyle } from "@/hooks/useMapStyle";
+import { useMap } from "@/hooks/useMap";
 import { useRealtimeStatus } from "@/hooks/useTaxiStore";
 import { initRealtime } from "@/lib/taxi/realtime";
 import { TaxiModeSelect } from "./TaxiModeSelect";
@@ -23,7 +22,7 @@ function readModeFromUrl(): TaxiMode | null {
 }
 
 /**
- * Root of the taxi dispatch experience. Renders the shared Leaflet map and
+ * Root of the taxi dispatch experience. Renders the shared map and
  * overlays either the mode selector, the passenger flow, or the driver flow.
  */
 const MODE_STORAGE_KEY = "omantaxi:mode";
@@ -31,8 +30,8 @@ const MODE_STORAGE_KEY = "omantaxi:mode";
 export function TaxiMain() {
   const [mode, setModeState] = useState<TaxiMode | null>(null);
   const [picking, setPicking] = useState(false);
-  const { tileProvider } = useMapTileProvider();
-  const map = useLeafletMap();
+  const { mapStyle } = useMapStyle();
+  const map = useMap();
   const realtimeStatus = useRealtimeStatus();
 
   // The role is kept in sessionStorage: it survives a refresh of THIS tab (so an
@@ -77,12 +76,12 @@ export function TaxiMain() {
   );
 
   // Bind the click listener directly to the map instance once it is ready.
-  // (LeafletMap initialises asynchronously, so attaching via its onClick prop
-  // can miss the map; binding here re-runs reliably when `map` becomes available.)
+  // (The map initialises asynchronously, so binding here re-runs reliably
+  // once `map` becomes available.)
   useEffect(() => {
     if (!map) return;
-    const handler = (e: { latlng: { lat: number; lng: number } }) => {
-      clickHandlerRef.current?.(e.latlng.lat, e.latlng.lng);
+    const handler = (e: { lngLat: { lat: number; lng: number } }) => {
+      clickHandlerRef.current?.(e.lngLat.lat, e.lngLat.lng);
     };
     map.on("click", handler);
     return () => {
@@ -94,23 +93,12 @@ export function TaxiMain() {
 
   return (
     <div className="relative h-dvh-screen w-full overflow-hidden bg-zinc-950">
-      <LeafletMap
-        className="h-full w-full"
+      <MapView
+        mapStyle={mapStyle.style}
         center={DEFAULT_PICKUP}
         zoom={13}
-        cursorStyle={picking ? "crosshair" : "grab"}
-      >
-        <LeafletTileLayer
-          url={tileProvider.url}
-          fallbackUrls={tileProvider.fallbackUrls}
-          className={tileProvider.className}
-          attribution={tileProvider.attribution}
-          maxZoom={tileProvider.maxZoom}
-          tileSize={tileProvider.tileSize}
-          zoomOffset={tileProvider.zoomOffset}
-          detectRetina={tileProvider.detectRetina}
-        />
-      </LeafletMap>
+        cursorStyle={picking ? "crosshair" : undefined}
+      />
 
       {mode !== null && (
         <TaxiMapControls />

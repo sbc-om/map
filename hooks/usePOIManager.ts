@@ -1,10 +1,12 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { useLeafletMap } from './useLeafletMap';
+import { useMap } from './useMap';
 import type { POI, POIGeoJSON, POICategory } from '@/types/poi';
 import { getCategoryColor } from '@/constants/poi-categories';
-import type { Marker } from 'leaflet';
+import { maplibre } from '@/lib/map/maplibre';
+import { escapeHtml, htmlElement } from '@/lib/utils/maps';
+import type { Marker } from 'maplibre-gl';
 
 const STORAGE_KEY = 'map-pois';
 
@@ -21,7 +23,7 @@ const STORAGE_KEY = 'map-pois';
  * @returns Object with POI management functions and state
  */
 export function usePOIManager() {
-  const map = useLeafletMap();
+  const map = useMap();
   const [pois, setPOIs] = useState<POI[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const markersRef = useRef<Map<string, Marker>>(new Map());
@@ -64,16 +66,14 @@ export function usePOIManager() {
   /**
    * Create marker for POI
    */
-  const createMarker = useCallback(async (poi: POI) => {
+  const createMarker = useCallback((poi: POI) => {
     if (!map) return null;
 
-    const L = await import('leaflet');
+    const { Marker, Popup } = maplibre();
     const color = getCategoryColor(poi.category);
 
-    const marker = L.marker([poi.lat, poi.lng], {
-      icon: L.divIcon({
-        className: 'custom-poi-marker',
-        html: `
+    const element = htmlElement(
+      `
           <div style="
             width: 32px;
             height: 32px;
@@ -91,21 +91,30 @@ export function usePOIManager() {
             ">📍</div>
           </div>
         `,
-        iconSize: [32, 32],
-        iconAnchor: [16, 32],
-        popupAnchor: [0, -32],
-      }),
-    }).addTo(map);
+      'custom-poi-marker'
+    );
+    element.style.cursor = 'pointer';
 
-    // Add popup
-    const popupContent = `
+    // Add popup (user text is escaped: titles also arrive via GeoJSON import)
+    const popup = new Popup({ offset: 32 }).setHTML(`
       <div style="min-width: 150px;">
-        <div style="font-weight: 600; margin-bottom: 4px;">${poi.title}</div>
-        ${poi.description ? `<div style="font-size: 12px; color: #666; margin-bottom: 4px;">${poi.description}</div>` : ''}
+        <div style="font-weight: 600; margin-bottom: 4px;">${escapeHtml(poi.title)}</div>
+        ${poi.description ? `<div style="font-size: 12px; color: #666; margin-bottom: 4px;">${escapeHtml(poi.description)}</div>` : ''}
         <div style="font-size: 11px; color: #999;">${poi.lat.toFixed(6)}, ${poi.lng.toFixed(6)}</div>
       </div>
-    `;
-    marker.bindPopup(popupContent);
+    `);
+
+    // Rotated pin: its tip is the bottom-left corner, i.e. bottom-center once rotated
+    const marker = new Marker({ element, anchor: 'bottom' })
+      .setLngLat([poi.lng, poi.lat])
+      .setPopup(popup)
+      .addTo(map);
+
+    // Marker clicks must not reach the map; toggle the popup ourselves
+    element.addEventListener('click', (e) => {
+      e.stopPropagation();
+      marker.togglePopup();
+    });
 
     return marker;
   }, [map]);
@@ -113,20 +122,16 @@ export function usePOIManager() {
   /**
    * Render all POI markers on map
    */
-  const renderMarkers = useCallback(async () => {
+  const renderMarkers = useCallback(() => {
     if (!map) return;
 
     // Clear existing markers
-    markersRef.current.forEach((marker) => {
-      if (map.hasLayer(marker)) {
-        map.removeLayer(marker);
-      }
-    });
+    markersRef.current.forEach((marker) => marker.remove());
     markersRef.current.clear();
 
     // Create new markers
     for (const poi of pois) {
-      const marker = await createMarker(poi);
+      const marker = createMarker(poi);
       if (marker) {
         markersRef.current.set(poi.id, marker);
       }
@@ -193,12 +198,9 @@ export function usePOIManager() {
     });
 
     // Remove marker
-    const marker = markersRef.current.get(id);
-    if (marker && map?.hasLayer(marker)) {
-      map.removeLayer(marker);
-    }
+    markersRef.current.get(id)?.remove();
     markersRef.current.delete(id);
-  }, [map, savePOIs]);
+  }, [savePOIs]);
 
   /**
    * Clear all POIs
@@ -208,13 +210,9 @@ export function usePOIManager() {
     savePOIs([]);
 
     // Clear all markers
-    markersRef.current.forEach((marker) => {
-      if (map?.hasLayer(marker)) {
-        map.removeLayer(marker);
-      }
-    });
+    markersRef.current.forEach((marker) => marker.remove());
     markersRef.current.clear();
-  }, [map, savePOIs]);
+  }, [savePOIs]);
 
   /**
    * Get POIs by category
@@ -281,15 +279,13 @@ export function usePOIManager() {
    */
   const flyToPOI = useCallback((poi: POI) => {
     if (!map) return;
-    map.flyTo([poi.lat, poi.lng], 16, {
-      duration: 1.5,
-    });
+    map.flyTo({ center: [poi.lng, poi.lat], zoom: 16, duration: 1500, essential: true });
 
     // Open popup if marker exists
     const marker = markersRef.current.get(poi.id);
     if (marker) {
       setTimeout(() => {
-        marker.openPopup();
+        if (!marker.getPopup()?.isOpen()) marker.togglePopup();
       }, 1500);
     }
   }, [map]);
@@ -310,11 +306,7 @@ export function usePOIManager() {
   useEffect(() => {
     const markers = markersRef.current;
     return () => {
-      markers.forEach((marker) => {
-        if (map?.hasLayer(marker)) {
-          map.removeLayer(marker);
-        }
-      });
+      markers.forEach((marker) => marker.remove());
       markers.clear();
     };
   }, [map]);

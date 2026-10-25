@@ -2,7 +2,7 @@
  * Map-related TypeScript type definitions
  */
 
-import type { Map as LeafletMap } from 'leaflet';
+import type { Map as MapLibreMap, StyleSpecification } from 'maplibre-gl';
 
 /**
  * Map configuration options
@@ -17,21 +17,13 @@ export interface MapConfig {
 }
 
 /**
- * Tile provider configuration
+ * Basemap style option
  */
-export interface TileProvider {
+export interface MapStyleOption {
   id: string;
   name: string;
-  url: string;
-  /** Mirror URLs tried in order when `url` fails to load */
-  fallbackUrls?: string[];
-  /** CSS class for the tile container, e.g. a colour filter */
-  className?: string;
-  attribution: string;
-  maxZoom: number;
-  tileSize?: number;
-  zoomOffset?: number;
-  detectRetina?: boolean;
+  /** Style URL or inline style document */
+  style: string | StyleSpecification;
   category: 'standard' | 'satellite' | 'dark' | 'custom';
 }
 
@@ -39,8 +31,8 @@ export interface TileProvider {
  * Map context value type
  */
 export interface MapContextValue {
-  map: LeafletMap | null;
-  setMap: (map: LeafletMap | null) => void;
+  map: MapLibreMap | null;
+  setMap: (map: MapLibreMap | null) => void;
   isReady: boolean;
   error: Error | null;
   isInitializing: boolean;

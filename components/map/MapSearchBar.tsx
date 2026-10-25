@@ -26,9 +26,9 @@ import {
   Bus,
 } from "lucide-react";
 import { useGeolocation } from "@/hooks/useGeolocation";
-import { useLeafletMap } from "@/hooks/useLeafletMap";
+import { useMap } from "@/hooks/useMap";
 import { MapUser } from "./MapUser";
-import { searchCountries, type Country } from "@/lib/countries";
+import { searchCountries } from "@/lib/countries";
 import { nominatimSearch } from "@/lib/geo-services";
 
 // ─── Category quick-access chips ─────────────────────────────────────────────
@@ -162,7 +162,7 @@ export function MapSearchBar({
   onCategoryClick,
   leftPanelOpen = false,
 }: MapSearchBarProps) {
-  const map = useLeafletMap();
+  const map = useMap();
   const [isExpanded, setIsExpanded] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<GeoResult[]>([]);
@@ -180,6 +180,8 @@ export function MapSearchBar({
   useEffect(() => {
     try {
       const stored = localStorage.getItem("sbcmap_recent_searches");
+      // Read after hydration on purpose: the static HTML has no recents
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (stored) setRecentSearches(JSON.parse(stored).slice(0, 5));
     } catch {
       /* ignore */
@@ -205,6 +207,8 @@ export function MapSearchBar({
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
     if (!query.trim()) {
+      // Clearing the box drops stale results together with the pending debounce
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setResults([]);
       setLoading(false);
       return;
@@ -302,7 +306,7 @@ export function MapSearchBar({
 
   // Select a result
   const handleSelect = useCallback(
-    async (result: GeoResult) => {
+    (result: GeoResult) => {
       saveToRecent(result);
       setIsExpanded(false);
       setQuery("");
@@ -314,7 +318,6 @@ export function MapSearchBar({
       } else {
         // Fly directly to coordinates
         if (map) {
-          const L = await import("leaflet");
           const zoomLevel =
             result.type === "country"
               ? 5
@@ -324,9 +327,11 @@ export function MapSearchBar({
                   ? 16
                   : 14;
 
-          map.flyTo(L.latLng(result.lat, result.lng), zoomLevel, {
-            animate: true,
-            duration: 1.5,
+          map.flyTo({
+            center: [result.lng, result.lat],
+            zoom: zoomLevel,
+            duration: 1500,
+            essential: true,
           });
         }
       }
@@ -371,8 +376,12 @@ export function MapSearchBar({
     }
   }, [selectedIndex]);
 
-  // Reset index on query change
-  useEffect(() => setSelectedIndex(-1), [query]);
+  // Reset index on query change (during render, no extra effect pass)
+  const [indexQuery, setIndexQuery] = useState(query);
+  if (indexQuery !== query) {
+    setIndexQuery(query);
+    setSelectedIndex(-1);
+  }
 
   // Close on outside click
   useEffect(() => {

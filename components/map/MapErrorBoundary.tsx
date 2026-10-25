@@ -25,7 +25,7 @@ interface MapErrorBoundaryState {
  * - Prevents app crashes from map failures
  *
  * Common Error Scenarios:
- * - Missing Leaflet library
+ * - MapLibre GL failing to load (e.g. no WebGL support)
  * - Invalid map configuration
  * - Tile loading failures
  * - Marker rendering errors
@@ -35,9 +35,7 @@ interface MapErrorBoundaryState {
  * ```tsx
  * <MapErrorBoundary>
  *   <MapProvider>
- *     <LeafletMap>
- *       <LeafletTileLayer url={tileUrl} />
- *     </LeafletMap>
+ *     <MapView mapStyle={mapStyle.style} />
  *   </MapProvider>
  * </MapErrorBoundary>
  * ```

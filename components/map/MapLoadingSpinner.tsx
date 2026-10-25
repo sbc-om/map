@@ -20,9 +20,7 @@ import { MapContext } from "@/contexts/MapContext";
  * ```tsx
  * <div className="relative w-full h-screen">
  *   <MapProvider>
- *     <LeafletMap>
- *       <LeafletTileLayer url={tileUrl} />
- *     </LeafletMap>
+ *     <MapView mapStyle={mapStyle.style} />
  *     <MapLoadingSpinner />
  *   </MapProvider>
  * </div>

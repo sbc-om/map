@@ -1,53 +1,83 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { useLeafletMap } from './useLeafletMap';
+import { useMap } from './useMap';
 import { calculateDistance as calculateDistanceUtil } from '@/lib/utils/coordinates';
-import type { LatLng, LeafletMouseEvent } from 'leaflet';
+import { setOverlay, removeOverlay, featureCollection } from '@/lib/map/overlays';
+import type { MapMouseEvent } from 'maplibre-gl';
 
 export type MeasurementMode = 'distance' | 'area' | null;
 
 interface MeasurementPoint {
-  latlng: LatLng;
-  marker?: L.CircleMarker;
+  latlng: { lat: number; lng: number };
 }
 
-type L = typeof import('leaflet');
+const OVERLAY_ID = 'measurement';
+
+/** Polygon fill/outline, dashed distance line and vertex dots (Leaflet look). */
+const OVERLAY_LAYERS = [
+  {
+    id: 'fill',
+    type: 'fill' as const,
+    filter: ['==', ['geometry-type'], 'Polygon'],
+    paint: { 'fill-color': '#3b82f6', 'fill-opacity': 0.2 },
+  },
+  {
+    id: 'outline',
+    type: 'line' as const,
+    filter: ['==', ['geometry-type'], 'Polygon'],
+    paint: { 'line-color': '#3b82f6', 'line-width': 2, 'line-opacity': 0.7 },
+  },
+  {
+    id: 'line',
+    type: 'line' as const,
+    filter: ['==', ['geometry-type'], 'LineString'],
+    // Dash lengths are in line widths: 10px dash / 10px gap at width 3
+    paint: {
+      'line-color': '#3b82f6',
+      'line-width': 3,
+      'line-opacity': 0.7,
+      'line-dasharray': [3.3, 3.3],
+    },
+  },
+  {
+    id: 'points',
+    type: 'circle' as const,
+    filter: ['==', ['geometry-type'], 'Point'],
+    paint: {
+      'circle-radius': 6,
+      'circle-color': '#3b82f6',
+      'circle-opacity': 0.8,
+      'circle-stroke-color': '#fff',
+      'circle-stroke-width': 2,
+    },
+  },
+];
 
 /**
  * Hook for map measurement functionality
  * Supports distance and area measurements
- * 
+ *
  * Features:
  * - Proper event handler cleanup (stores reference to specific handler)
- * - Memory leak prevention with refs cleanup
- * - Safe async Leaflet import pattern
+ * - Everything is drawn as one GeoJSON overlay, so it survives basemap switches
  * - Uses shared utility for distance calculation (no duplication)
- * 
+ *
  * @returns Object with measurement functions and state
  */
 export function useMeasurement() {
-  const map = useLeafletMap();
+  const map = useMap();
   const [mode, setMode] = useState<MeasurementMode>(null);
   const [points, setPoints] = useState<MeasurementPoint[]>([]);
   const [distance, setDistance] = useState<number>(0);
   const [area, setArea] = useState<number>(0);
-  const polylineRef = useRef<L.Polyline | null>(null);
-  const polygonRef = useRef<L.Polygon | null>(null);
-  const markersRef = useRef<L.CircleMarker[]>([]);
-  
-  // Store click handler reference for proper cleanup
-  const clickHandlerRef = useRef<((e: LeafletMouseEvent) => void) | null>(null);
 
-  /**
-   * Calculate distance between two LatLng points using shared utility
-   */
-  const calculatePointDistance = useCallback((latlng1: LatLng, latlng2: LatLng): number => {
-    return calculateDistanceUtil(
-      [latlng1.lat, latlng1.lng],
-      [latlng2.lat, latlng2.lng]
-    );
-  }, []);
+  // Store click handler reference for proper cleanup
+  const clickHandlerRef = useRef<((e: MapMouseEvent) => void) | null>(null);
+  // Latest points, read by the map click handler between renders
+  const pointsRef = useRef<MeasurementPoint[]>([]);
+  // Mode of the drawing on screen; kept after finish so undo still redraws it
+  const drawModeRef = useRef<MeasurementMode>(null);
 
   /**
    * Calculate total distance for all points
@@ -55,10 +85,13 @@ export function useMeasurement() {
   const calculateTotalDistance = useCallback((pts: MeasurementPoint[]): number => {
     let total = 0;
     for (let i = 0; i < pts.length - 1; i++) {
-      total += calculatePointDistance(pts[i].latlng, pts[i + 1].latlng);
+      total += calculateDistanceUtil(
+        [pts[i].latlng.lat, pts[i].latlng.lng],
+        [pts[i + 1].latlng.lat, pts[i + 1].latlng.lng]
+      );
     }
     return total;
-  }, [calculatePointDistance]);
+  }, []);
 
   /**
    * Calculate area using Shoelace formula
@@ -84,40 +117,65 @@ export function useMeasurement() {
   }, []);
 
   /**
+   * Redraw the overlay and recompute totals for a point list
+   */
+  const applyPoints = useCallback((pts: MeasurementPoint[], measurementMode: MeasurementMode) => {
+    if (!map) return;
+
+    const coords = pts.map((p): [number, number] => [p.latlng.lng, p.latlng.lat]);
+    const features: GeoJSON.Feature[] = coords.map((c) => ({
+      type: 'Feature',
+      properties: {},
+      geometry: { type: 'Point', coordinates: c },
+    }));
+
+    if (measurementMode === 'distance' && pts.length > 1) {
+      features.unshift({
+        type: 'Feature',
+        properties: {},
+        geometry: { type: 'LineString', coordinates: coords },
+      });
+      setDistance(calculateTotalDistance(pts));
+    } else if (measurementMode === 'distance') {
+      setDistance(0);
+    }
+
+    if (measurementMode === 'area' && pts.length > 2) {
+      features.unshift({
+        type: 'Feature',
+        properties: {},
+        geometry: { type: 'Polygon', coordinates: [[...coords, coords[0]]] },
+      });
+      setArea(calculateArea(pts));
+    } else if (measurementMode === 'area') {
+      setArea(0);
+    }
+
+    // Draw above labels so the vertices stay clickable-looking and visible
+    setOverlay(map, OVERLAY_ID, featureCollection(features), OVERLAY_LAYERS, {
+      belowLabels: false,
+    });
+  }, [map, calculateTotalDistance, calculateArea]);
+
+  /**
    * Clear measurement - removes only OUR click handler, not all handlers
    * NOTE: Defined before startMeasurement to avoid reference issues
    */
   const clearMeasurement = useCallback(() => {
     if (!map) return;
 
-    // Remove all markers
-    markersRef.current.forEach((marker) => {
-      if (marker && map.hasLayer(marker)) {
-        map.removeLayer(marker);
-      }
-    });
-    markersRef.current = [];
-
-    // Remove polyline
-    if (polylineRef.current && map.hasLayer(polylineRef.current)) {
-      map.removeLayer(polylineRef.current);
-      polylineRef.current = null;
-    }
-
-    // Remove polygon
-    if (polygonRef.current && map.hasLayer(polygonRef.current)) {
-      map.removeLayer(polygonRef.current);
-      polygonRef.current = null;
-    }
+    removeOverlay(map, OVERLAY_ID);
 
     // Remove ONLY our click handler (not all click handlers)
     if (clickHandlerRef.current) {
       map.off('click', clickHandlerRef.current);
       clickHandlerRef.current = null;
     }
-    
-    map.getContainer().style.cursor = '';
 
+    map.getCanvas().style.cursor = '';
+
+    pointsRef.current = [];
+    drawModeRef.current = null;
     setPoints([]);
     setDistance(0);
     setArea(0);
@@ -127,141 +185,40 @@ export function useMeasurement() {
   /**
    * Start measurement mode
    */
-  const startMeasurement = useCallback(async (measurementMode: MeasurementMode) => {
+  const startMeasurement = useCallback((measurementMode: MeasurementMode) => {
     if (!map || !measurementMode) return;
 
     // Clear previous measurement first
     clearMeasurement();
 
     setMode(measurementMode);
-
-    const L = await import('leaflet');
+    drawModeRef.current = measurementMode;
 
     // Create click handler and store reference for proper cleanup
-    const handleMapClick = (e: LeafletMouseEvent) => {
-      const newPoint: MeasurementPoint = {
-        latlng: e.latlng,
-      };
-
-      // Add marker
-      const marker = L.circleMarker(e.latlng, {
-        radius: 6,
-        fillColor: '#3b82f6',
-        color: '#fff',
-        weight: 2,
-        opacity: 1,
-        fillOpacity: 0.8,
-      }).addTo(map);
-
-      newPoint.marker = marker;
-      markersRef.current.push(marker);
-
-      setPoints((prev) => {
-        const updated = [...prev, newPoint];
-
-        // Update distance
-        if (measurementMode === 'distance' && updated.length > 1) {
-          const dist = calculateTotalDistance(updated);
-          setDistance(dist);
-
-          // Draw/update polyline
-          const latlngs = updated.map((p) => p.latlng);
-          if (polylineRef.current) {
-            polylineRef.current.setLatLngs(latlngs);
-          } else {
-            polylineRef.current = L.polyline(latlngs, {
-              color: '#3b82f6',
-              weight: 3,
-              opacity: 0.7,
-              dashArray: '10, 10',
-            }).addTo(map);
-          }
-        }
-
-        // Update area
-        if (measurementMode === 'area' && updated.length > 2) {
-          const calculatedArea = calculateArea(updated);
-          setArea(calculatedArea);
-
-          // Draw/update polygon
-          const latlngs = updated.map((p) => p.latlng);
-          if (polygonRef.current) {
-            polygonRef.current.setLatLngs(latlngs);
-          } else {
-            polygonRef.current = L.polygon(latlngs, {
-              color: '#3b82f6',
-              weight: 2,
-              opacity: 0.7,
-              fillColor: '#3b82f6',
-              fillOpacity: 0.2,
-            }).addTo(map);
-          }
-        }
-
-        return updated;
-      });
+    const handleMapClick = (e: MapMouseEvent) => {
+      const updated = [...pointsRef.current, { latlng: { lat: e.lngLat.lat, lng: e.lngLat.lng } }];
+      pointsRef.current = updated;
+      setPoints(updated);
+      applyPoints(updated, measurementMode);
     };
 
     // Store handler reference for cleanup
     clickHandlerRef.current = handleMapClick;
     map.on('click', handleMapClick);
-    map.getContainer().style.cursor = 'crosshair';
-  }, [map, calculateTotalDistance, calculateArea, clearMeasurement]);
+    map.getCanvas().style.cursor = 'crosshair';
+  }, [map, clearMeasurement, applyPoints]);
 
   /**
    * Undo last point
    */
   const undoLastPoint = useCallback(() => {
-    if (points.length === 0) return;
+    if (pointsRef.current.length === 0) return;
 
-    setPoints((prev) => {
-      const updated = [...prev];
-      const removed = updated.pop();
-
-      // Remove marker
-      if (removed?.marker && map?.hasLayer(removed.marker)) {
-        map.removeLayer(removed.marker);
-      }
-      markersRef.current.pop();
-
-      // Update measurements
-      if (mode === 'distance' && updated.length > 1) {
-        const dist = calculateTotalDistance(updated);
-        setDistance(dist);
-
-        // Update polyline
-        if (polylineRef.current) {
-          const latlngs = updated.map((p) => p.latlng);
-          polylineRef.current.setLatLngs(latlngs);
-        }
-      } else if (mode === 'distance' && updated.length <= 1) {
-        setDistance(0);
-        if (polylineRef.current && map?.hasLayer(polylineRef.current)) {
-          map.removeLayer(polylineRef.current);
-          polylineRef.current = null;
-        }
-      }
-
-      if (mode === 'area' && updated.length > 2) {
-        const calculatedArea = calculateArea(updated);
-        setArea(calculatedArea);
-
-        // Update polygon
-        if (polygonRef.current) {
-          const latlngs = updated.map((p) => p.latlng);
-          polygonRef.current.setLatLngs(latlngs);
-        }
-      } else if (mode === 'area' && updated.length <= 2) {
-        setArea(0);
-        if (polygonRef.current && map?.hasLayer(polygonRef.current)) {
-          map.removeLayer(polygonRef.current);
-          polygonRef.current = null;
-        }
-      }
-
-      return updated;
-    });
-  }, [points, map, mode, calculateTotalDistance, calculateArea]);
+    const updated = pointsRef.current.slice(0, -1);
+    pointsRef.current = updated;
+    setPoints(updated);
+    applyPoints(updated, drawModeRef.current);
+  }, [applyPoints]);
 
   /**
    * Finish measurement (close polygon for area)
@@ -274,8 +231,8 @@ export function useMeasurement() {
       map.off('click', clickHandlerRef.current);
       clickHandlerRef.current = null;
     }
-    
-    map.getContainer().style.cursor = '';
+
+    map.getCanvas().style.cursor = '';
     setMode(null);
   }, [map]);
 
@@ -286,18 +243,8 @@ export function useMeasurement() {
         map.off('click', clickHandlerRef.current);
         clickHandlerRef.current = null;
       }
-      // Clean up any remaining layers
-      markersRef.current.forEach((marker) => {
-        if (marker && map?.hasLayer(marker)) {
-          map.removeLayer(marker);
-        }
-      });
-      if (polylineRef.current && map?.hasLayer(polylineRef.current)) {
-        map.removeLayer(polylineRef.current);
-      }
-      if (polygonRef.current && map?.hasLayer(polygonRef.current)) {
-        map.removeLayer(polygonRef.current);
-      }
+      // Clean up any remaining drawing
+      if (map) removeOverlay(map, OVERLAY_ID);
     };
   }, [map]);
 

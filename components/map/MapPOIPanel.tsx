@@ -28,7 +28,10 @@ import {
   getCategoryById,
 } from "@/constants/poi-categories";
 import { formatDecimalDegrees } from "@/lib/utils/coordinates";
-import { useLeafletMap } from "@/hooks/useLeafletMap";
+import { useMap } from "@/hooks/useMap";
+import { maplibre } from "@/lib/map/maplibre";
+import { htmlElement } from "@/lib/utils/maps";
+import type { Marker } from "maplibre-gl";
 
 interface MapPOIPanelProps {
   isOpen: boolean;
@@ -215,12 +218,9 @@ export const MapPOIPanel = memo(function MapPOIPanel({
   const [snap, setSnap] = useState<number | string | null>(snapPoints[1]);
 
   // ── Draggable preview marker ──────────────────────────────────────────────
-  const map = useLeafletMap();
-  const previewMarkerRef = useRef<any>(null);
+  const map = useMap();
+  const previewMarkerRef = useRef<Marker | null>(null);
   const prevCategoryRef = useRef<string>("");
-  // Keep a stable ref to map for cleanup on unmount
-  const mapRef = useRef(map);
-  useEffect(() => { mapRef.current = map; }, [map]);
 
   // Detect mobile viewport
   useEffect(() => {
@@ -254,8 +254,8 @@ export const MapPOIPanel = memo(function MapPOIPanel({
   useEffect(() => {
     const isFormMode = viewMode === "add" || viewMode === "edit";
     if (!isFormMode) {
-      if (previewMarkerRef.current && mapRef.current) {
-        try { mapRef.current.removeLayer(previewMarkerRef.current); } catch {}
+      if (previewMarkerRef.current) {
+        previewMarkerRef.current.remove();
         previewMarkerRef.current = null;
         prevCategoryRef.current = "";
       }
@@ -265,8 +265,8 @@ export const MapPOIPanel = memo(function MapPOIPanel({
   // Cleanup preview marker on unmount
   useEffect(() => {
     return () => {
-      if (previewMarkerRef.current && mapRef.current) {
-        try { mapRef.current.removeLayer(previewMarkerRef.current); } catch {}
+      if (previewMarkerRef.current) {
+        previewMarkerRef.current.remove();
         previewMarkerRef.current = null;
       }
     };
@@ -286,8 +286,11 @@ export const MapPOIPanel = memo(function MapPOIPanel({
 
   const [formData, setFormData] = useState<POIFormData>(initialFormData);
 
-  // Update form coordinates when they change from parent
-  useEffect(() => {
+  // Update form coordinates when they change from parent (adjusted during
+  // render rather than in an effect, so there is no extra cascading render)
+  const [syncedInitial, setSyncedInitial] = useState(`${initialLatStr},${initialLngStr}`);
+  if (syncedInitial !== `${initialLatStr},${initialLngStr}`) {
+    setSyncedInitial(`${initialLatStr},${initialLngStr}`);
     if (initialLatStr && initialLngStr) {
       setFormData((prev) => ({
         ...prev,
@@ -295,7 +298,7 @@ export const MapPOIPanel = memo(function MapPOIPanel({
         lng: initialLngStr,
       }));
     }
-  }, [initialLatStr, initialLngStr]);
+  }
 
   // ── Draggable preview marker (position + category-aware) ──────────────────
   useEffect(() => {
@@ -307,7 +310,7 @@ export const MapPOIPanel = memo(function MapPOIPanel({
 
     if (!isFormMode || !hasCoords || !map) {
       if (previewMarkerRef.current) {
-        try { map?.removeLayer(previewMarkerRef.current); } catch {}
+        previewMarkerRef.current.remove();
         previewMarkerRef.current = null;
         prevCategoryRef.current = "";
       }
@@ -318,13 +321,13 @@ export const MapPOIPanel = memo(function MapPOIPanel({
 
     if (previewMarkerRef.current && !categoryChanged) {
       // Just reposition - no flicker
-      previewMarkerRef.current.setLatLng([lat, lng]);
+      previewMarkerRef.current.setLngLat([lng, lat]);
       return;
     }
 
     // Remove stale marker before recreating
     if (previewMarkerRef.current) {
-      try { map.removeLayer(previewMarkerRef.current); } catch {}
+      previewMarkerRef.current.remove();
       previewMarkerRef.current = null;
     }
     prevCategoryRef.current = formData.category;
@@ -333,42 +336,36 @@ export const MapPOIPanel = memo(function MapPOIPanel({
     const cat = getCategoryById(formData.category);
     const icon = cat?.icon ?? "📍";
 
-    import("leaflet").then((L) => {
-      if (!map) return;
-      const marker = L.marker([lat, lng], {
-        draggable: true,
-        zIndexOffset: 600,
-        icon: L.divIcon({
-          // poi-preview-marker → sets touch-action:none + grab cursor on the
-          // Leaflet icon wrapper so mobile drag works and desktop shows grab cursor
-          className: "poi-preview-marker",
-          html: `<div style="position:relative;width:44px;height:60px;pointer-events:none">
+    // poi-preview-marker → sets touch-action:none + grab cursor on the
+    // marker element so mobile drag works and desktop shows grab cursor
+    const element = htmlElement(
+      `<div style="position:relative;width:44px;height:60px;pointer-events:none">
   <div class="poi-pulse-ring" style="position:absolute;top:0;left:0;width:40px;height:40px;border-radius:50%;border:2px solid ${color}"></div>
   <div style="position:absolute;top:4px;left:4px;width:32px;height:32px;background:${color};border:3px solid white;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center">
     <span style="transform:rotate(45deg);font-size:14px;line-height:1">${icon}</span>
   </div>
 </div>`,
-          iconSize: [44, 60],
-          iconAnchor: [22, 60],
-          popupAnchor: [0, -64],
-        }),
-      }).addTo(map);
+      "poi-preview-marker"
+    );
+    // Above saved POI pins (was zIndexOffset: 600)
+    element.style.zIndex = "600";
+    // A tap on the pin must not count as a map click (e.g. picking a location)
+    element.addEventListener("click", (e) => e.stopPropagation());
 
-      // Explicit enable - belt-and-suspenders for mobile reliability
-      marker.dragging?.enable();
+    const marker = new (maplibre().Marker)({ element, anchor: "bottom", draggable: true })
+      .setLngLat([lng, lat])
+      .addTo(map);
 
-      marker.on("dragend", function (this: typeof marker) {
-        const pos = this.getLatLng();
-        setFormData((prev) => ({
-          ...prev,
-          lat: pos.lat.toFixed(6),
-          lng: pos.lng.toFixed(6),
-        }));
-      });
-
-      previewMarkerRef.current = marker;
+    marker.on("dragend", () => {
+      const pos = marker.getLngLat();
+      setFormData((prev) => ({
+        ...prev,
+        lat: pos.lat.toFixed(6),
+        lng: pos.lng.toFixed(6),
+      }));
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+
+    previewMarkerRef.current = marker;
   }, [map, viewMode, formData.lat, formData.lng, formData.category]);
 
   // Filter POIs by category if specified

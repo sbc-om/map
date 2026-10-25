@@ -3,25 +3,30 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
+  Car,
   Crosshair,
   Loader2,
   MapPin,
   MousePointerClick,
+  MessageCircle,
   Move,
   Navigation,
   Phone,
   Power,
+  Route as RouteIcon,
   User,
   X,
 } from "lucide-react";
 import {
   AccordionSection,
+  DangerButton,
   Field,
   Metric,
   Panel,
   PrimaryButton,
   SmallButton,
   RideLine,
+  StatusPill,
   TextInput,
 } from "./ui";
 import { RideChat } from "./RideChat";
@@ -368,8 +373,17 @@ export function DriverFlow({
   // ─────────────────────────────────────────────────────────────────────────
   if (!driver) {
     return (
-      <Panel title="Driver sign-up" onExit={onExit}>
-        <form onSubmit={handleRegister} className="space-y-3">
+      <Panel
+        title="Driver sign-up"
+        subtitle="Set up your driver profile"
+        onExit={onExit}
+        footer={
+          <PrimaryButton type="submit" form="driver-signup">
+            Create profile
+          </PrimaryButton>
+        }
+      >
+        <form id="driver-signup" onSubmit={handleRegister} className="space-y-3">
           <Field label="Full name">
             <TextInput
               value={fullName}
@@ -411,7 +425,6 @@ export function DriverFlow({
               placeholder="e.g. 1234 A/B"
             />
           </Field>
-          <PrimaryButton type="submit">Create profile</PrimaryButton>
         </form>
       </Panel>
     );
@@ -421,18 +434,51 @@ export function DriverFlow({
   // Active trip
   // ─────────────────────────────────────────────────────────────────────────
   if (activeRide && activeRide.status !== "COMPLETED" && activeRide.status !== "CANCELLED") {
+    const phase = TRIP_PHASE[activeRide.status] ?? TRIP_PHASE.ACCEPTED;
     return (
-      <Panel title="Active trip" onExit={onExit}>
+      <Panel
+        title="Active trip"
+        subtitle={phase.subtitle}
+        badge={<StatusPill label={phase.label} tone={phase.tone} pulse />}
+        onExit={onExit}
+        footer={
+          <div className="flex gap-2">
+            {/* Cancel is only available before the trip starts. */}
+            {(activeRide.status === "ACCEPTED" ||
+              activeRide.status === "ARRIVED") && (
+              <DangerButton onClick={() => handleCancelRide(activeRide)}>
+                <X className="h-4 w-4" /> Cancel
+              </DangerButton>
+            )}
+            {activeRide.status === "ACCEPTED" && (
+              <PrimaryButton onClick={() => advance(activeRide, "ARRIVED")}>
+                I&apos;ve arrived
+              </PrimaryButton>
+            )}
+            {activeRide.status === "ARRIVED" && (
+              <PrimaryButton onClick={() => advance(activeRide, "IN_PROGRESS")}>
+                Start trip
+              </PrimaryButton>
+            )}
+            {activeRide.status === "IN_PROGRESS" && (
+              <PrimaryButton onClick={() => advance(activeRide, "COMPLETED")}>
+                Complete trip
+              </PrimaryButton>
+            )}
+          </div>
+        }
+      >
         <AccordionSection
           title="Passenger details"
           subtitle="Who you are picking up"
+          icon={<User />}
           defaultOpen
           accent="green"
         >
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+          <div className="rounded-xl border border-white/10 bg-white/5 p-3">
             <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/15 text-amber-400">
-                <User className="h-5 w-5" />
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-sm font-bold text-black">
+                {activeRide.passengerName.trim().charAt(0).toUpperCase() || "?"}
               </span>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-bold text-white">
@@ -454,6 +500,7 @@ export function DriverFlow({
         <AccordionSection
           title="Trip details"
           subtitle="Pickup, destination, and fare"
+          icon={<RouteIcon />}
           defaultOpen
           accent="amber"
         >
@@ -472,6 +519,7 @@ export function DriverFlow({
         <AccordionSection
           title="Message passenger"
           subtitle="Chat or call your passenger"
+          icon={<MessageCircle />}
           defaultOpen
           accent="blue"
         >
@@ -484,34 +532,6 @@ export function DriverFlow({
           />
         </AccordionSection>
 
-        <div className="mt-4">
-          {activeRide.status === "ACCEPTED" && (
-            <PrimaryButton onClick={() => advance(activeRide, "ARRIVED")}>
-              I&apos;ve arrived at pickup
-            </PrimaryButton>
-          )}
-          {activeRide.status === "ARRIVED" && (
-            <PrimaryButton onClick={() => advance(activeRide, "IN_PROGRESS")}>
-              Start trip
-            </PrimaryButton>
-          )}
-          {activeRide.status === "IN_PROGRESS" && (
-            <PrimaryButton onClick={() => advance(activeRide, "COMPLETED")}>
-              Complete trip
-            </PrimaryButton>
-          )}
-
-          {/* Cancel is only available before the trip starts. */}
-          {(activeRide.status === "ACCEPTED" ||
-            activeRide.status === "ARRIVED") && (
-            <button
-              onClick={() => handleCancelRide(activeRide)}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 py-3 text-sm font-bold text-red-300 transition hover:bg-red-500/20"
-            >
-              <X className="h-4 w-4" /> Cancel ride
-            </button>
-          )}
-        </div>
       </Panel>
     );
   }
@@ -544,60 +564,62 @@ export function DriverFlow({
         </div>
       )}
 
-      <Panel title={driver.fullName.split(" ")[0]} onExit={onExit}>
-      <AccordionSection
-        title="Driver status"
-        subtitle="Availability and vehicle"
-        defaultOpen
-        accent="green"
-      >
-      <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 p-3">
-        <div className="flex items-center gap-3">
-          <span
-            className={`h-2.5 w-2.5 rounded-full ${
-              isOnline ? "bg-green-400" : "bg-white/30"
-            }`}
+      <Panel
+        title={driver.fullName.split(" ")[0]}
+        subtitle={`${VEHICLE_TYPES[driver.vehicleType].label} · ${driver.vehicleNumber}`}
+        badge={
+          <StatusPill
+            label={isOnline ? "Online" : "Offline"}
+            tone={isOnline ? "green" : "neutral"}
+            pulse={isOnline}
           />
-          <div>
-            <p className="text-sm font-bold text-white">
-              {isOnline ? "Online" : "Offline"}
-            </p>
-            <p className="text-xs text-white/45">
-              {VEHICLE_TYPES[driver.vehicleType].label} · {driver.vehicleNumber}
-            </p>
-          </div>
+        }
+        onExit={onExit}
+        footer={
+          <button
+            onClick={isOnline ? goOffline : goOnline}
+            disabled={goingOnline}
+            className={`flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold transition active:scale-[0.98] disabled:opacity-50 ${
+              isOnline
+                ? "border border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20"
+                : "bg-amber-500 text-black shadow-[0_8px_24px_-8px_rgba(245,158,11,0.6)] hover:bg-amber-400"
+            }`}
+          >
+            {goingOnline ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Power className="h-4 w-4" />
+            )}
+            {isOnline ? "Go offline" : "Go online"}
+          </button>
+        }
+      >
+      <div className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.035] p-3.5">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-2xl">
+          {VEHICLE_TYPES[driver.vehicleType].emoji}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-white">
+            {driver.fullName}
+          </p>
+          <p className="truncate text-xs text-white/45">
+            {isOnline
+              ? "Visible to nearby passengers"
+              : "Go online to receive ride requests"}
+          </p>
         </div>
-        <button
-          onClick={isOnline ? goOffline : goOnline}
-          disabled={goingOnline}
-          className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition disabled:opacity-50 ${
-            isOnline
-              ? "border border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20"
-              : "bg-amber-500 text-black hover:bg-amber-400"
-          }`}
-        >
-          {goingOnline ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Power className="h-4 w-4" />
-          )}
-          {isOnline ? "Go offline" : "Go online"}
-        </button>
+        <Car className="h-4 w-4 shrink-0 text-white/25" />
       </div>
-      </AccordionSection>
 
       {/* My location ------------------------------------------------------- */}
       <AccordionSection
         title="My location"
         subtitle="GPS or map-based positioning"
+        icon={<MapPin />}
         defaultOpen={!driver.location}
         accent="blue"
       >
-      <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-        <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-white/45">
-          <MapPin className="h-3.5 w-3.5 text-amber-400" />
-          My location
-        </div>
+      <div>
         <p className="mb-2.5 text-xs text-white/55">
           {driver.location
             ? `${driver.location.lat.toFixed(5)}, ${driver.location.lng.toFixed(5)} · ${
@@ -634,21 +656,22 @@ export function DriverFlow({
       </AccordionSection>
 
       {!isOnline ? (
-        <p className="mt-4 rounded-xl border border-white/10 bg-white/5 px-3 py-4 text-center text-xs text-white/45">
+        <p className="rounded-2xl border border-dashed border-white/10 px-3 py-5 text-center text-xs text-white/40">
           Go online to start receiving ride requests.
         </p>
       ) : (
         <AccordionSection
           title="Incoming requests"
-          subtitle="Nearby ride requests in real time"
+          subtitle={
+            incoming.length > 0
+              ? `${incoming.length} nearby request${incoming.length > 1 ? "s" : ""}`
+              : "Nearby ride requests in real time"
+          }
+          icon={<Navigation />}
           defaultOpen
           accent="amber"
         >
         <div>
-          <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-white/45">
-            <Navigation className="h-3.5 w-3.5 text-amber-400" />
-            Incoming requests
-          </div>
           {incoming.length === 0 ? (
             <div className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 py-6 text-xs text-white/40">
               <Loader2 className="h-4 w-4 animate-spin" /> Waiting for ride
@@ -704,7 +727,7 @@ export function DriverFlow({
           clearDriverSession(driver.id);
           onExit();
         }}
-        className="mt-4 w-full rounded-xl border border-white/10 py-2 text-xs font-medium text-white/40 transition hover:text-white/70"
+        className="w-full rounded-xl py-2 text-xs font-medium text-white/35 transition hover:text-white/70"
       >
         Sign out
       </button>
@@ -712,3 +735,13 @@ export function DriverFlow({
     </>
   );
 }
+
+/** Header copy for each stage of an active trip. */
+const TRIP_PHASE: Record<
+  string,
+  { label: string; subtitle: string; tone: "amber" | "green" }
+> = {
+  ACCEPTED: { label: "En route", subtitle: "Heading to the pickup", tone: "amber" },
+  ARRIVED: { label: "Arrived", subtitle: "Waiting for your passenger", tone: "green" },
+  IN_PROGRESS: { label: "On trip", subtitle: "Driving to the destination", tone: "green" },
+};

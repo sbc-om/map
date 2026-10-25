@@ -2,38 +2,19 @@
 
 import { useContext } from 'react';
 import { MapContext } from '@/contexts/MapContext';
-import type { Map as LeafletMap } from 'leaflet';
+import type { Map as MapLibreMap } from 'maplibre-gl';
 
 /**
- * Hook to access Leaflet map instance from MapContext
- * 
- * @returns Leaflet map instance or null if not initialized
+ * Access the shared MapLibre map instance from MapContext.
+ *
+ * @returns the map once its first style has loaded, otherwise null
  * @throws Error if used outside MapProvider
- * 
- * @example
- * ```tsx
- * function MapControl() {
- *   const map = useLeafletMap();
- *   
- *   const handleZoomIn = () => {
- *     if (map) {
- *       map.zoomIn();
- *     }
- *   };
- *   
- *   return (
- *     <button onClick={handleZoomIn} disabled={!map}>
- *       Zoom In
- *     </button>
- *   );
- * }
- * ```
  */
-export function useLeafletMap(): LeafletMap | null {
+export function useMap(): MapLibreMap | null {
   const context = useContext(MapContext);
 
   if (context === undefined) {
-    throw new Error('useLeafletMap must be used within a MapProvider');
+    throw new Error('useMap must be used within a MapProvider');
   }
 
   return context.map;

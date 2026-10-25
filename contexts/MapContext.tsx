@@ -7,11 +7,11 @@ import {
   useCallback,
   useMemo,
 } from "react";
-import type { Map as LeafletMap } from "leaflet";
+import type { Map as MapLibreMap } from "maplibre-gl";
 import { MapContextValue } from "@/types/map";
 
 /**
- * Map context for managing Leaflet map instance
+ * Map context for sharing the MapLibre map instance
  */
 export const MapContext = createContext<MapContextValue | undefined>(undefined);
 
@@ -23,7 +23,7 @@ interface MapProviderProps {
  * MapProvider component that manages map instance state
  *
  * Features:
- * - Manages Leaflet map instance state
+ * - Manages MapLibre map instance state
  * - Provides setMap function for registering map instance
  * - Tracks map initialization status with isReady flag
  * - Tracks initialization and error states
@@ -33,18 +33,18 @@ interface MapProviderProps {
  * @example
  * ```tsx
  * <MapProvider>
- *   <LeafletMap />
+ *   <MapView />
  *   <MapControls />
  * </MapProvider>
  * ```
  */
 export function MapProvider({ children }: MapProviderProps) {
-  const [map, setMapState] = useState<LeafletMap | null>(null);
+  const [map, setMapState] = useState<MapLibreMap | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
 
   // Memoized setMap to prevent unnecessary re-renders
-  const setMap = useCallback((newMap: LeafletMap | null) => {
+  const setMap = useCallback((newMap: MapLibreMap | null) => {
     setMapState(newMap);
     if (newMap) {
       setIsInitializing(false);

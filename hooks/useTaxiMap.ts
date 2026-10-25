@@ -1,25 +1,22 @@
 "use client";
 
 /**
- * Imperative helpers for drawing taxi-specific layers on the shared Leaflet
- * map: pickup/destination markers, the route polyline, and live driver pins.
+ * Imperative helpers for drawing taxi-specific layers on the shared MapLibre
+ * map: pickup/destination pins, the route line, and live driver cars.
  *
- * Leaflet is imported dynamically (SSR-safe) and all layers are tracked in refs
- * so they can be updated or removed without recreating the map.
+ * Pins and cars are HTML markers (they survive basemap switches); the route is
+ * a GeoJSON overlay that re-attaches itself after a style change. Everything is
+ * tracked in refs so it can be updated or removed without recreating the map.
  */
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import type {
-  LayerGroup,
-  Map as LeafletMap,
-  Marker,
-  Polyline,
-} from "leaflet";
-import { useLeafletMap } from "./useLeafletMap";
-import { animatePolylineDraw, glideMarker, stopGlide } from "@/lib/utils/map-motion";
+import type { Map as MapLibreMap, Marker, PaddingOptions } from "maplibre-gl";
+import { useMap } from "./useMap";
+import { glideMarker, stopGlide } from "@/lib/utils/map-motion";
+import { maplibre } from "@/lib/map/maplibre";
+import { boundsOf, toLngLat, toLngLatPath } from "@/lib/map/geo";
+import { animateLineOverlay, removeOverlay } from "@/lib/map/overlays";
 import type { LatLng, VehicleType } from "@/types/taxi";
-
-type LType = typeof import("leaflet");
 
 type MarkerMotion = {
   location: LatLng;
@@ -34,47 +31,31 @@ type MarkerMotion = {
 type CarOptions = { vehicle: VehicleType; self?: boolean; offline?: boolean };
 
 /**
- * Fit padding that keeps framed content clear of the taxi UI: the side panel
- * on desktop, the bottom sheet on mobile.
+ * Camera padding that keeps framed content clear of the taxi UI: the side
+ * panel on desktop, the bottom sheet on mobile.
  */
-export function overlayPadding(): {
-  paddingTopLeft: [number, number];
-  paddingBottomRight: [number, number];
-} {
+export function overlayPadding(): Required<PaddingOptions> {
   if (typeof window === "undefined" || window.innerWidth < 640) {
     const sheet = typeof window === "undefined" ? 300 : Math.round(window.innerHeight * 0.45);
-    return { paddingTopLeft: [40, 80], paddingBottomRight: [40, sheet] };
+    return { top: 80, left: 40, right: 40, bottom: sheet };
   }
-  return { paddingTopLeft: [440, 70], paddingBottomRight: [70, 70] };
-}
-
-/** Map centre that puts `point` in the middle of the area not covered by the UI. */
-function visibleCenterFor(map: LeafletMap, point: LatLng, zoom: number) {
-  const {
-    paddingTopLeft: [left, top],
-    paddingBottomRight: [right, bottom],
-  } = overlayPadding();
-  const projected = map
-    .project([point.lat, point.lng], zoom)
-    .subtract([(left - right) / 2, (top - bottom) / 2]);
-  return map.unproject(projected, zoom);
+  return { top: 70, left: 440, right: 70, bottom: 70 };
 }
 
 /** True when `point` sits comfortably inside the area not covered by the UI. */
-function inComfortZone(map: LeafletMap, point: LatLng) {
-  const {
-    paddingTopLeft: [left, top],
-    paddingBottomRight: [right, bottom],
-  } = overlayPadding();
-  const size = map.getSize();
-  const p = map.latLngToContainerPoint([point.lat, point.lng]);
-  const marginX = (size.x - left - right) * 0.2;
-  const marginY = (size.y - top - bottom) * 0.2;
+function inComfortZone(map: MapLibreMap, point: LatLng) {
+  const { top, left, right, bottom } = overlayPadding();
+  const container = map.getContainer();
+  const width = container.clientWidth;
+  const height = container.clientHeight;
+  const p = map.project(toLngLat(point));
+  const marginX = (width - left - right) * 0.2;
+  const marginY = (height - top - bottom) * 0.2;
   return (
     p.x >= left + marginX &&
-    p.x <= size.x - right - marginX &&
+    p.x <= width - right - marginX &&
     p.y >= top + marginY &&
-    p.y <= size.y - bottom - marginY
+    p.y <= height - bottom - marginY
   );
 }
 
@@ -128,7 +109,7 @@ function glideDuration(previous: MarkerMotion | undefined) {
 function applyMarkerRotation(marker: Marker, rotation: number) {
   const body = marker
     .getElement()
-    ?.querySelector<HTMLElement>(".taxi-car-marker__body");
+    .querySelector<HTMLElement>(".taxi-car-marker__body");
   // The car is drawn top-down facing north, so the bearing is the rotation.
   if (body) body.style.transform = `rotate(${rotation}deg)`;
 }
@@ -178,21 +159,29 @@ function vehicleSvg(vehicle: VehicleType) {
   </svg>`;
 }
 
-function carIcon(L: LType, { vehicle, self, offline }: CarOptions) {
-  const classes = [
+/** Paint a car marker element for the given vehicle / state. */
+function paintCar(el: HTMLElement, { vehicle, self, offline }: CarOptions) {
+  el.className = [
     "taxi-car-marker",
     self ? "taxi-car-marker--self" : "",
     offline ? "taxi-car-marker--offline" : "",
   ]
     .filter(Boolean)
     .join(" ");
-  return L.divIcon({
-    className: classes,
-    html: `<div class="taxi-car-marker__halo"></div>
-      <div class="taxi-car-marker__body">${vehicleSvg(vehicle)}</div>`,
-    iconSize: [60, 60],
-    iconAnchor: [30, 30],
-  });
+  el.style.width = "60px";
+  el.style.height = "60px";
+  el.innerHTML = `<div class="taxi-car-marker__halo"></div>
+      <div class="taxi-car-marker__body">${vehicleSvg(vehicle)}</div>`;
+}
+
+function carMarker(point: LatLng, car: CarOptions, zIndex: number, draggable = false) {
+  const el = document.createElement("div");
+  paintCar(el, car);
+  el.classList.toggle("is-draggable", draggable);
+  el.style.zIndex = String(zIndex);
+  return new (maplibre().Marker)({ element: el, anchor: "center", draggable }).setLngLat(
+    toLngLat(point)
+  );
 }
 
 function carKey({ vehicle, self, offline }: CarOptions) {
@@ -202,33 +191,55 @@ function carKey({ vehicle, self, offline }: CarOptions) {
 /** True when a pin is new or moved, so re-renders of the same pin don't replay the drop. */
 function pinMoved(previous: Marker | null, point: LatLng) {
   if (!previous) return true;
-  const ll = previous.getLatLng();
+  const ll = previous.getLngLat();
   return Math.abs(ll.lat - point.lat) > 1e-6 || Math.abs(ll.lng - point.lng) > 1e-6;
 }
 
-function pinIcon(L: LType, color: string, glyph: string, animate = true) {
-  return L.divIcon({
-    className: animate ? "map-pin-drop" : "",
-    html: `<div style="
+function pinMarker(
+  point: LatLng,
+  color: string,
+  glyph: string,
+  { animate = true, draggable = false }: { animate?: boolean; draggable?: boolean } = {}
+) {
+  const el = document.createElement("div");
+  if (animate) el.className = "map-pin-drop";
+  el.style.zIndex = "800";
+  el.style.cursor = draggable ? "grab" : "";
+  el.innerHTML = `<div style="
       display:flex;align-items:center;justify-content:center;
       width:34px;height:34px;border-radius:50% 50% 50% 0;
       transform:rotate(-45deg);
       background:${color};
       border:2px solid white;
       box-shadow:0 3px 10px rgba(0,0,0,0.4);
-    "><span style="transform:rotate(45deg);font-size:15px;line-height:1;">${glyph}</span></div>`,
-    iconSize: [34, 34],
-    iconAnchor: [17, 34],
-  });
+    "><span style="transform:rotate(45deg);font-size:15px;line-height:1;">${glyph}</span></div>`;
+  // The rotated square's tip sits 7px below the box: lift it onto the point.
+  return new (maplibre().Marker)({ element: el, anchor: "bottom", offset: [0, -7], draggable })
+    .setLngLat(toLngLat(point));
 }
 
+const ROUTE_ID = "taxi-route";
+const ROUTE_LAYERS = [
+  {
+    id: "casing",
+    type: "line" as const,
+    layout: { "line-cap": "round" as const, "line-join": "round" as const },
+    paint: { "line-color": "#ffffff", "line-width": 9, "line-opacity": 0.9 },
+  },
+  {
+    id: "line",
+    type: "line" as const,
+    layout: { "line-cap": "round" as const, "line-join": "round" as const },
+    paint: { "line-color": "#f59e0b", "line-width": 5 },
+  },
+];
+
 export function useTaxiMap() {
-  const map = useLeafletMap();
-  const lRef = useRef<LType | null>(null);
+  const map = useMap();
 
   const pickupRef = useRef<Marker | null>(null);
   const destRef = useRef<Marker | null>(null);
-  const routeRef = useRef<LayerGroup | null>(null);
+  const routeTokenRef = useRef(0);
   const driversRef = useRef<Map<string, Marker>>(new Map());
   const driverMotionRef = useRef<Map<string, MarkerMotion>>(new Map());
   const markerKeyRef = useRef<Map<string, string>>(new Map());
@@ -237,26 +248,21 @@ export function useTaxiMap() {
   const selfKeyRef = useRef<string | null>(null);
   const selfDragEndRef = useRef<(() => void) | null>(null);
 
-  const ensureL = useCallback(async (): Promise<LType | null> => {
-    if (lRef.current) return lRef.current;
-    if (typeof window === "undefined") return null;
-    lRef.current = await import("leaflet");
-    return lRef.current;
-  }, []);
-
   const flyTo = useCallback(
     (point: LatLng, zoom = 15) => {
-      if (!map) return;
-      map.flyTo(visibleCenterFor(map, point, zoom), zoom, {
-        duration: 1.1,
-        easeLinearity: 0.2,
+      map?.flyTo({
+        center: toLngLat(point),
+        zoom,
+        padding: overlayPadding(),
+        duration: 1100,
+        essential: true,
       });
     },
     [map]
   );
 
   const setPickup = useCallback(
-    async (
+    (
       point: LatLng | null,
       opts?: {
         draggable?: boolean;
@@ -268,111 +274,84 @@ export function useTaxiMap() {
         boarded?: boolean;
       }
     ) => {
-      const L = await ensureL();
-      if (!map || !L) return;
+      if (!map) return;
       const animate = point ? pinMoved(pickupRef.current, point) : false;
       pickupRef.current?.remove();
       pickupRef.current = null;
       if (!point) return;
 
-      const marker = L.marker([point.lat, point.lng], {
-        icon: pinIcon(L, "#22c55e", opts?.boarded ? "" : "🧍", animate),
-        draggable: opts?.draggable ?? false,
-        zIndexOffset: 800,
+      const marker = pinMarker(point, "#22c55e", opts?.boarded ? "" : "🧍", {
+        animate,
+        draggable: opts?.draggable,
       }).addTo(map);
 
       if (opts?.draggable && opts.onDragEnd) {
         marker.on("dragend", () => {
-          const ll = marker.getLatLng();
+          const ll = marker.getLngLat();
           opts.onDragEnd?.({ lat: ll.lat, lng: ll.lng });
         });
       }
       pickupRef.current = marker;
     },
-    [ensureL, map]
+    [map]
   );
 
   const setDestination = useCallback(
-    async (
+    (
       point: LatLng | null,
       opts?: { draggable?: boolean; onDragEnd?: (p: LatLng) => void }
     ) => {
-      const L = await ensureL();
-      if (!map || !L) return;
+      if (!map) return;
       const animate = point ? pinMoved(destRef.current, point) : false;
       destRef.current?.remove();
       destRef.current = null;
       if (!point) return;
 
-      const marker = L.marker([point.lat, point.lng], {
-        icon: pinIcon(L, "#ef4444", "🏁", animate),
-        draggable: opts?.draggable ?? false,
-        zIndexOffset: 800,
+      const marker = pinMarker(point, "#ef4444", "🏁", {
+        animate,
+        draggable: opts?.draggable,
       }).addTo(map);
 
       if (opts?.draggable && opts.onDragEnd) {
         marker.on("dragend", () => {
-          const ll = marker.getLatLng();
+          const ll = marker.getLngLat();
           opts.onDragEnd?.({ lat: ll.lat, lng: ll.lng });
         });
       }
       destRef.current = marker;
     },
-    [ensureL, map]
+    [map]
   );
 
+  /** Route as `[lat, lng]` points; traced in once the camera has framed it. */
   const drawRoute = useCallback(
-    async (coordinates: [number, number][] | null, fit = true) => {
-      const L = await ensureL();
-      if (!map || !L) return;
-      routeRef.current?.remove();
-      routeRef.current = null;
+    (coordinates: [number, number][] | null, fit = true) => {
+      if (!map) return;
+      const token = ++routeTokenRef.current;
+      removeOverlay(map, ROUTE_ID);
       if (!coordinates || coordinates.length < 2) return;
 
-      const outline = L.polyline(coordinates, {
-        color: "#ffffff",
-        weight: 8,
-        opacity: 0.9,
-      });
-      const line: Polyline = L.polyline(coordinates, {
-        color: "#fbbf24",
-        weight: 5,
-        opacity: 0.95,
-        lineCap: "round",
-        lineJoin: "round",
-      });
-      const group = L.layerGroup([outline, line]).addTo(map);
-      routeRef.current = group;
-
+      const path = toLngLatPath(coordinates);
       const reveal = () => {
-        if (routeRef.current !== group) return;
-        animatePolylineDraw(map, [outline, line]);
+        if (routeTokenRef.current !== token) return;
+        animateLineOverlay(map, ROUTE_ID, path, ROUTE_LAYERS);
       };
 
-      if (fit) {
-        // Draw the route once the camera has settled on it; a zoom mid-draw
-        // would change the path length and cut the animation short.
-        group.eachLayer((l) => (l as Polyline).setStyle({ opacity: 0 }));
-        map.flyToBounds(line.getBounds(), { ...overlayPadding(), duration: 0.9 });
-        map.once("moveend", () => {
-          outline.setStyle({ opacity: 0.9 });
-          line.setStyle({ opacity: 0.95 });
-          reveal();
-        });
+      const bounds = fit ? boundsOf(coordinates) : null;
+      if (bounds) {
+        map.fitBounds(bounds, { padding: overlayPadding(), duration: 900, maxZoom: 16 });
+        map.once("moveend", reveal);
       } else {
         reveal();
       }
     },
-    [ensureL, map]
+    [map]
   );
 
   /** Render/update a set of driver cars keyed by driver id. */
   const setDrivers = useCallback(
-    async (
-      drivers: Array<{ id: string; location: LatLng; vehicle?: VehicleType }>
-    ) => {
-      const L = await ensureL();
-      if (!map || !L) return;
+    (drivers: Array<{ id: string; location: LatLng; vehicle?: VehicleType }>) => {
+      if (!map) return;
 
       const next = new Set(drivers.map((d) => d.id));
       // Remove stale markers
@@ -402,16 +381,12 @@ export function useTaxiMap() {
           }
           // Keep the icon in sync with the driver's chosen vehicle type.
           if (markerKeyRef.current.get(d.id) !== key) {
-            existing.setIcon(carIcon(L, car));
+            paintCar(existing.getElement(), car);
             markerKeyRef.current.set(d.id, key);
           }
           applyMarkerRotation(existing, motion.rotation);
         } else {
-          const marker = L.marker([d.location.lat, d.location.lng], {
-            icon: carIcon(L, car),
-            zIndexOffset: 600,
-            keyboard: false,
-          }).addTo(map);
+          const marker = carMarker(d.location, car, 600).addTo(map);
           markerKeyRef.current.set(d.id, key);
           applyMarkerRotation(marker, motion.rotation);
           driversRef.current.set(d.id, marker);
@@ -420,7 +395,7 @@ export function useTaxiMap() {
         driverMotionRef.current.set(d.id, motion);
       }
     },
-    [ensureL, map]
+    [map]
   );
 
   /**
@@ -429,7 +404,7 @@ export function useTaxiMap() {
    * smooth. With `follow`, the camera pans to keep the car in view.
    */
   const setSelfDriver = useCallback(
-    async (
+    (
       point: LatLng | null,
       opts?: {
         draggable?: boolean;
@@ -439,8 +414,7 @@ export function useTaxiMap() {
         follow?: boolean;
       }
     ) => {
-      const L = await ensureL();
-      if (!map || !L) return;
+      if (!map) return;
       if (!point) {
         if (selfRef.current) stopGlide(selfRef.current);
         selfRef.current?.remove();
@@ -458,6 +432,7 @@ export function useTaxiMap() {
       const key = carKey(car);
       const previous = selfMotionRef.current ?? undefined;
       const motion = nextMotion(previous, point);
+      const draggable = opts?.draggable ?? false;
 
       let marker = selfRef.current;
       if (marker) {
@@ -468,21 +443,16 @@ export function useTaxiMap() {
           });
         }
         if (selfKeyRef.current !== key) {
-          marker.setIcon(carIcon(L, car));
+          paintCar(marker.getElement(), car);
           selfKeyRef.current = key;
         }
-        if (opts?.draggable) marker.dragging?.enable();
-        else marker.dragging?.disable();
+        marker.setDraggable(draggable);
       } else {
-        marker = L.marker([point.lat, point.lng], {
-          icon: carIcon(L, car),
-          draggable: opts?.draggable ?? false,
-          zIndexOffset: 1000,
-          keyboard: false,
-        }).addTo(map);
+        marker = carMarker(point, car, 1000, draggable).addTo(map);
         selfRef.current = marker;
         selfKeyRef.current = key;
       }
+      marker.getElement().classList.toggle("is-draggable", draggable);
       applyMarkerRotation(marker, motion.rotation);
       selfMotionRef.current = motion;
 
@@ -493,7 +463,7 @@ export function useTaxiMap() {
         const target = marker;
         const onDragEnd = opts.onDragEnd;
         const handler = () => {
-          const ll = target.getLatLng();
+          const ll = target.getLngLat();
           onDragEnd({ lat: ll.lat, lng: ll.lng });
         };
         marker.on("dragend", handler);
@@ -501,23 +471,19 @@ export function useTaxiMap() {
       }
 
       if (opts?.follow && !inComfortZone(map, point)) {
-        map.panTo(visibleCenterFor(map, point, map.getZoom()), {
-          animate: true,
-          duration: 0.8,
-          easeLinearity: 0.25,
-        });
+        map.easeTo({ center: toLngLat(point), padding: overlayPadding(), duration: 800 });
       }
     },
-    [ensureL, map]
+    [map]
   );
 
   const clearAll = useCallback(() => {
     pickupRef.current?.remove();
     destRef.current?.remove();
-    routeRef.current?.remove();
     pickupRef.current = null;
     destRef.current = null;
-    routeRef.current = null;
+    routeTokenRef.current++;
+    if (map) removeOverlay(map, ROUTE_ID);
     if (selfRef.current) stopGlide(selfRef.current);
     selfRef.current?.remove();
     selfRef.current = null;
@@ -531,7 +497,7 @@ export function useTaxiMap() {
     driversRef.current.clear();
     driverMotionRef.current.clear();
     markerKeyRef.current.clear();
-  }, []);
+  }, [map]);
 
   // Clean up all layers on unmount.
   useEffect(() => clearAll, [clearAll]);
@@ -541,7 +507,7 @@ export function useTaxiMap() {
   // (e.g. the route/fare calculation), causing repeated OSRM requests.
   return useMemo(
     () => ({
-      map: map as LeafletMap | null,
+      map,
       flyTo,
       setPickup,
       setDestination,

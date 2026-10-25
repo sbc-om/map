@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
+  Car,
   Crosshair,
   Loader2,
   MapPin,
+  MessageCircle,
   MousePointerClick,
   Move,
   Navigation,
@@ -16,16 +18,19 @@ import {
 import { AddressSearch } from "./AddressSearch";
 import {
   AccordionSection,
+  DangerButton,
   Field,
   Metric,
   Panel,
   PrimaryButton,
   RideLine,
   SmallButton,
+  StatusPill,
   TextInput,
 } from "./ui";
 import { RideChat } from "./RideChat";
 import { overlayPadding, useTaxiMap } from "@/hooks/useTaxiMap";
+import { boundsOf, toLngLat } from "@/lib/map/geo";
 import { useDrivers, usePassengerSession, useRide } from "@/hooks/useTaxiStore";
 import {
   createPassengerSession,
@@ -280,7 +285,7 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
     revealedTaxisRef.current = true;
 
     const view = map.getBounds();
-    if (onlineDrivers.some((d) => view.contains([d.location!.lat, d.location!.lng]))) {
+    if (onlineDrivers.some((d) => view.contains(toLngLat(d.location!)))) {
       return;
     }
     const center = map.getCenter();
@@ -292,7 +297,10 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
       [origin.lat, origin.lng],
       ...nearest.map((d): [number, number] => [d.location!.lat, d.location!.lng]),
     ];
-    map.flyToBounds(points, { ...overlayPadding(), maxZoom: 14, duration: 1.2 });
+    const bounds = boundsOf(points);
+    if (bounds) {
+      map.fitBounds(bounds, { padding: overlayPadding(), maxZoom: 14, duration: 1200 });
+    }
   }, [taxiMap.map, ride, onlineDrivers, pickup]);
 
   // ── Assigned driver (once a taxi accepts the ride) ─────────────────────────
@@ -435,8 +443,17 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
   // ─────────────────────────────────────────────────────────────────────────
   if (!passenger) {
     return (
-      <Panel title="Passenger sign-up" onExit={onExit}>
-        <form onSubmit={handleRegister} className="space-y-3">
+      <Panel
+        title="Passenger sign-up"
+        subtitle="Tell us who is riding"
+        onExit={onExit}
+        footer={
+          <PrimaryButton type="submit" form="passenger-signup">
+            Continue
+          </PrimaryButton>
+        }
+      >
+        <form id="passenger-signup" onSubmit={handleRegister} className="space-y-3">
           <Field label="Full name">
             <TextInput
               value={fullName}
@@ -452,7 +469,6 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
               placeholder="+968 …"
             />
           </Field>
-          <PrimaryButton type="submit">Continue</PrimaryButton>
         </form>
       </Panel>
     );
@@ -469,8 +485,35 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
             Math.ceil((DRIVER_APPROACH_MS - (now - ride.acceptedAt)) / 1000)
           )
         : null;
+    const pill = RIDE_PILL[ride.status] ?? RIDE_PILL.REQUESTED;
     return (
-      <Panel title="Your ride" onExit={onExit}>
+      <Panel
+        title="Your ride"
+        subtitle={(STATUS_COPY[ride.status] ?? STATUS_COPY.REQUESTED).sub}
+        badge={
+          <StatusPill
+            label={pill.label}
+            tone={pill.tone}
+            pulse={ride.status !== "COMPLETED"}
+          />
+        }
+        onExit={onExit}
+        footer={
+          ride.status === "COMPLETED" ? (
+            <PrimaryButton onClick={handleNewRide}>Book another ride</PrimaryButton>
+          ) : ride.status === "IN_PROGRESS" ? (
+            // Once the trip is underway it can no longer be cancelled.
+            <p className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-center text-xs text-white/50">
+              <Navigation className="h-3.5 w-3.5 text-amber-400" />
+              Trip in progress — enjoy your ride.
+            </p>
+          ) : (
+            <DangerButton onClick={handleCancelRide} className="w-full">
+              <X className="h-4 w-4" /> Cancel ride
+            </DangerButton>
+          )
+        }
+      >
         <RideStatusView
           status={ride.status}
           nearbyCount={nearbyDrivers.length}
@@ -481,6 +524,7 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
           <AccordionSection
             title="Driver details"
             subtitle="Your assigned taxi"
+            icon={<Car />}
             defaultOpen
             accent="green"
           >
@@ -507,6 +551,7 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
           <AccordionSection
             title="Message driver"
             subtitle="Chat or call your driver"
+            icon={<MessageCircle />}
             defaultOpen
             accent="blue"
           >
@@ -524,6 +569,7 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
         <AccordionSection
           title="Trip details"
           subtitle="Pickup, destination, and fare"
+          icon={<RouteIcon />}
           defaultOpen
           accent="amber"
         >
@@ -539,26 +585,6 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
           </div>
         </AccordionSection>
 
-        {ride.status === "COMPLETED" ? (
-          <button
-            onClick={handleNewRide}
-            className="mt-4 w-full rounded-xl bg-amber-500 py-3 text-sm font-bold text-black transition hover:bg-amber-400 active:scale-[0.98]"
-          >
-            Book another ride
-          </button>
-        ) : ride.status === "IN_PROGRESS" ? (
-          // Once the trip is underway it can no longer be cancelled.
-          <p className="mt-4 rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-center text-xs text-white/45">
-            Trip in progress — enjoy your ride.
-          </p>
-        ) : (
-          <button
-            onClick={handleCancelRide}
-            className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 py-3 text-sm font-bold text-red-300 transition hover:bg-red-500/20"
-          >
-            <X className="h-4 w-4" /> Cancel ride
-          </button>
-        )}
       </Panel>
     );
   }
@@ -588,10 +614,39 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
         </div>
       )}
 
-      <Panel title={`Hi, ${passenger.fullName.split(" ")[0]}`} onExit={onExit}>
+      <Panel
+        title={`Hi, ${passenger.fullName.split(" ")[0]}`}
+        subtitle="Where would you like to go?"
+        badge={
+          onlineDrivers.length > 0 ? (
+            <StatusPill
+              label={`${onlineDrivers.length} online`}
+              tone="green"
+              pulse
+            />
+          ) : undefined
+        }
+        onExit={onExit}
+        footer={
+          <PrimaryButton disabled={!fare || routing} onClick={handleRequest}>
+            {routing ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Car className="h-4 w-4" />
+            )}
+            Request Taxi
+            {fare && !routing && (
+              <span className="rounded-md bg-black/15 px-1.5 py-0.5 text-xs tabular-nums">
+                {formatFare(fare.total)}
+              </span>
+            )}
+          </PrimaryButton>
+        }
+      >
       <AccordionSection
         title="Trip setup"
         subtitle="Pickup, destination, and map selection"
+        icon={<MapPin />}
         defaultOpen
         accent="green"
       >
@@ -654,6 +709,7 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
         <AccordionSection
           title="Fare estimate"
           subtitle={routing ? "Calculating the best route" : "Distance, time, and price"}
+          icon={<RouteIcon />}
           defaultOpen
           accent="amber"
         >
@@ -685,6 +741,7 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
       <AccordionSection
         title="Nearby taxis"
         subtitle="Live availability around your pickup"
+        icon={<Navigation />}
         accent="blue"
       >
         <p className="flex items-center gap-1.5 text-xs text-white/45">
@@ -697,15 +754,21 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
         </p>
       </AccordionSection>
 
-      <div className="mt-4">
-        <PrimaryButton disabled={!fare || routing} onClick={handleRequest}>
-          Request Taxi
-        </PrimaryButton>
-      </div>
     </Panel>
     </>
   );
 }
+
+const RIDE_PILL: Record<
+  string,
+  { label: string; tone: "amber" | "green" | "neutral" }
+> = {
+  REQUESTED: { label: "Searching", tone: "amber" },
+  ACCEPTED: { label: "En route", tone: "amber" },
+  ARRIVED: { label: "Arrived", tone: "green" },
+  IN_PROGRESS: { label: "On trip", tone: "green" },
+  COMPLETED: { label: "Completed", tone: "neutral" },
+};
 
 const STATUS_COPY: Record<string, { title: string; sub: string }> = {
   REQUESTED: { title: "Finding your driver…", sub: "Matching you with a nearby taxi" },

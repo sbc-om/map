@@ -4,7 +4,7 @@
  */
 
 import type { MapConfig } from '@/types/map';
-import type { LatLngBounds } from 'leaflet';
+import type { LngLatBounds } from 'maplibre-gl';
 
 /**
  * Validates if a zoom level is within valid range
@@ -206,11 +206,11 @@ export function clampZoom(
 }
 
 /**
- * Validates Leaflet bounds object
- * @param bounds - Leaflet LatLngBounds object
+ * Validates a MapLibre bounds object
+ * @param bounds - MapLibre LngLatBounds object
  * @returns True if bounds are valid
  */
-export function isValidLeafletBounds(bounds: LatLngBounds | null | undefined): boolean {
+export function isValidMapBounds(bounds: LngLatBounds | null | undefined): boolean {
   if (!bounds) return false;
   
   try {

@@ -2,10 +2,8 @@
  * Map components exports
  * 
  * Core Components:
- * - LeafletMap: Main map container with lifecycle management
- * - LeafletTileLayer: Tile layer with proper cleanup
- * - LeafletMarker: Marker with memoized position
- * - LeafletGeoJSON: GeoJSON renderer with memoized styles
+ * - MapView: MapLibre GL map container with lifecycle management
+ * - MapGeoJSON: GeoJSON overlay renderer with memoized styles
  * 
  * UI Components:
  * - MapMain: Main map layout with all controls
@@ -23,10 +21,8 @@
  * - MapLoadingSpinner: Loading state indicator
  */
 
-export { LeafletMap } from './LeafletMap';
-export { LeafletMarker } from './LeafletMarker';
-export { LeafletTileLayer } from './LeafletTileLayer';
-export { LeafletGeoJSON } from './LeafletGeoJSON';
+export { MapView } from './MapView';
+export { MapGeoJSON } from './MapGeoJSON';
 export { MapProvider } from '@/contexts/MapContext';
 export { MapErrorBoundary } from './MapErrorBoundary';
 export { MapLoadingSpinner } from './MapLoadingSpinner';

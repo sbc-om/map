@@ -269,66 +269,43 @@
   animation-delay: 4s;
 }
 
-/* Leaflet CSS import */
-@import "leaflet/dist/leaflet.css";
+/* MapLibre GL CSS import */
+@import "maplibre-gl/dist/maplibre-gl.css";
 @import "tw-animate-css";
 
 /* =====================================================
-   Leaflet rendering fixes (seamless, mobile-friendly)
+   MapLibre map surface
    ===================================================== */
 
-/* Match the map container background to the active theme so there is no
-   white/black flash while tiles load. */
-.leaflet-container {
+/* Match the canvas background to the theme so there is no white/black flash
+   before the first vector tiles are drawn. */
+.map-view.maplibregl-map {
   background: var(--map-background);
-  /* Crisp text/labels + smooth panning on mobile GPUs. */
-  -webkit-tap-highlight-color: transparent;
-  outline: none;
   font: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+.map-view .maplibregl-canvas {
+  outline: none;
 }
 
-/* Leaflet tiles must stay visually neutral. The app's global `*` base rule
-   assigns border/outline colors to every element, and on some browsers that
-   leaks onto tile <img> elements as visible grid lines. Reset tile visuals at
-   the source instead of fighting seams with oversized images. */
-.leaflet-tile-pane,
-.leaflet-tile-container,
-.leaflet-tile,
-.leaflet-tile-container img,
-img.leaflet-tile {
-  border: 0 !important;
-  outline: none !important;
-  box-shadow: none !important;
-  background: transparent !important;
-}
-
-/* Leaflet already composites panes with translate3d. Promoting every tile
-   to its own GPU layer (will-change) exhausts layer memory on iOS Safari and
-   shows up as blank squares, so tiles stay on the pane's layer. Smooth the
-   cross-fade a touch beyond Leaflet's default 0.2s linear. */
-.leaflet-fade-anim .leaflet-tile {
-  transition: opacity 0.28s ease-out;
-}
-/* Dark basemap: invert the light street map and rotate hues back so water
-   stays blue and parks green, then soften contrast for night viewing. */
-.map-tiles-dark {
-  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.88) saturate(0.55);
-}
-.leaflet-zoom-anim .leaflet-zoom-animated {
-  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-/* Make Leaflet's default controls finger-friendly and on-brand on touch. */
-.leaflet-touch .leaflet-bar a,
-.leaflet-touch .leaflet-control-zoom a {
-  width: 34px;
-  height: 34px;
-  line-height: 34px;
-}
-.leaflet-control-attribution {
+/* Compact, unobtrusive attribution in both themes. */
+.maplibregl-ctrl-attrib.maplibregl-compact {
+  margin: 0 0 6px 6px;
+  background: rgb(255 255 255 / 0.7);
+  backdrop-filter: blur(6px);
   font-size: 10px;
-  backdrop-filter: blur(4px);
 }
+.dark .maplibregl-ctrl-attrib.maplibregl-compact {
+  background: rgb(24 24 27 / 0.7);
+  color: rgb(255 255 255 / 0.6);
+}
+.dark .maplibregl-ctrl-attrib a {
+  color: rgb(255 255 255 / 0.7);
+}
+.dark .maplibregl-ctrl-attrib-button {
+  filter: invert(1);
+}
+
 
 @custom-variant dark (&:is(.dark *));
 
@@ -438,14 +415,10 @@ img.leaflet-tile {
 .taxi-car-marker--offline .taxi-car-marker__halo {
   animation: none;
 }
-.leaflet-zoom-anim .taxi-car-marker__body {
-  transition: none;
-}
-.taxi-car-marker.leaflet-marker-draggable {
+.taxi-car-marker.is-draggable {
   cursor: grab;
 }
-.taxi-car-marker.leaflet-drag-target,
-.taxi-car-marker:active {
+.taxi-car-marker.is-draggable:active {
   cursor: grabbing;
 }
 @keyframes taxi-car-halo {
@@ -455,7 +428,7 @@ img.leaflet-tile {
 }
 
 /* Map pins drop in with a soft bounce. The animation targets the inner
-   element so it never fights Leaflet's positioning transform. */
+   element so it never fights the marker's positioning transform. */
 .map-pin-drop > * {
   animation: map-pin-drop 520ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
   transform-origin: 50% 100%;

@@ -2,29 +2,28 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Layers, Check } from "lucide-react";
-import { TILE_PROVIDERS } from "@/constants/tile-providers";
+import { MAP_STYLES } from "@/constants/map-styles";
 
 // ─── Assets ───────────────────────────────────────────────────────────────────
 
-/** PNG preview screenshots for tile providers that have them */
+/** PNG preview screenshots for map styles that have them */
 const PREVIEW: Record<string, string> = {
-  osm:       "/map-basic.png",
+  streets:   "/map-basic.png",
   satellite: "/map-satellite.png",
   dark:      "/map-dark.png",
 };
 
-/** Fallback gradient + emoji for providers without screenshots */
+/** Fallback gradient + emoji for styles without screenshots */
 const FALLBACK: Record<string, { gradient: string; emoji: string }> = {
   light:   { gradient: "from-slate-50 to-gray-200",    emoji: "☀️" },
-  terrain: { gradient: "from-green-200 to-amber-300",  emoji: "⛰️" },
-  streets: { gradient: "from-violet-300 to-blue-400",  emoji: "🏙️" },
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 interface MapTileSwitcherProps {
-  selectedProviderId: string;
-  onProviderChange: (id: string) => void;
+  /** Id of the active entry in MAP_STYLES */
+  selectedStyleId: string;
+  onStyleChange: (id: string) => void;
 }
 
 /**
@@ -35,14 +34,14 @@ interface MapTileSwitcherProps {
  * - Check mark on selected tile
  */
 export function MapTileSwitcher({
-  selectedProviderId,
-  onProviderChange,
+  selectedStyleId,
+  onStyleChange,
 }: MapTileSwitcherProps) {
   const [isOpen, setIsOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   const current =
-    TILE_PROVIDERS.find((p) => p.id === selectedProviderId) ?? TILE_PROVIDERS[0];
+    MAP_STYLES.find((s) => s.id === selectedStyleId) ?? MAP_STYLES[0];
 
   // Close on outside click / touch
   useEffect(() => {
@@ -59,7 +58,7 @@ export function MapTileSwitcher({
   }, [isOpen]);
 
   const handleSelect = (id: string) => {
-    onProviderChange(id);
+    onStyleChange(id);
     setIsOpen(false);
   };
 
@@ -84,15 +83,15 @@ export function MapTileSwitcher({
 
           {/* 2-column grid */}
           <div className="grid grid-cols-2 gap-2">
-            {TILE_PROVIDERS.map((provider) => {
-              const isSelected = provider.id === selectedProviderId;
-              const preview = PREVIEW[provider.id];
-              const fb = FALLBACK[provider.id];
+            {MAP_STYLES.map((option) => {
+              const isSelected = option.id === selectedStyleId;
+              const preview = PREVIEW[option.id];
+              const fb = FALLBACK[option.id];
 
               return (
                 <button
-                  key={provider.id}
-                  onClick={() => handleSelect(provider.id)}
+                  key={option.id}
+                  onClick={() => handleSelect(option.id)}
                   className={`relative flex flex-col items-center gap-1.5 p-1.5 rounded-xl transition-all duration-150 ${
                     isSelected
                       ? "ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900/30"
@@ -105,7 +104,7 @@ export function MapTileSwitcher({
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={preview}
-                        alt={provider.name}
+                        alt={option.name}
                         className="w-full h-full object-cover"
                         draggable={false}
                       />
@@ -137,7 +136,7 @@ export function MapTileSwitcher({
                         : "text-gray-500 dark:text-gray-400"
                     }`}
                   >
-                    {provider.name}
+                    {option.name}
                   </span>
                 </button>
               );

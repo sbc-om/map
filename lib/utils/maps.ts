@@ -1,14 +1,23 @@
 /**
  * Map utility functions for bounds calculation and map operations
  * Validates: Requirements 12.1
- * 
- * NOTE: This module is SSR-safe. Functions that need Leaflet use async imports.
+ *
+ * NOTE: This module is SSR-safe. It only imports MapLibre types; anything
+ * that needs the runtime library goes through `maplibre()` (lib/map/maplibre).
+ * Coordinates are `[lat, lng]` here, as everywhere else in the app.
  */
 
-import type { LatLngBounds } from 'leaflet';
+import type {
+  FitBoundsOptions,
+  LngLatBounds,
+  LngLatBoundsLike,
+  Map as MapLibreMap,
+  Marker,
+} from 'maplibre-gl';
+import { distanceMeters, toLngLat } from '@/lib/map/geo';
 
 /**
- * Raw bounds data that can be used without Leaflet
+ * Raw bounds data that can be used without MapLibre
  */
 export interface RawBounds {
   minLat: number;
@@ -28,7 +37,7 @@ export function calculateRawBounds(
   if (coordinates.length === 0) {
     return null;
   }
-  
+
   if (coordinates.length === 1) {
     const [lat, lng] = coordinates[0];
     const offset = 0.001;
@@ -39,120 +48,133 @@ export function calculateRawBounds(
       maxLng: lng + offset,
     };
   }
-  
+
   let minLat = coordinates[0][0];
   let maxLat = coordinates[0][0];
   let minLng = coordinates[0][1];
   let maxLng = coordinates[0][1];
-  
+
   for (const [lat, lng] of coordinates) {
     if (lat < minLat) minLat = lat;
     if (lat > maxLat) maxLat = lat;
     if (lng < minLng) minLng = lng;
     if (lng > maxLng) maxLng = lng;
   }
-  
+
   return { minLat, maxLat, minLng, maxLng };
 }
 
 /**
- * Calculates bounding box from an array of coordinates (async, client-only)
+ * Calculates bounding box from an array of coordinates
  * @param coordinates - Array of [latitude, longitude] tuples
- * @returns Promise of Leaflet LatLngBounds object or null if array is empty
+ * @returns `[[west, south], [east, north]]` for `map.fitBounds`, or null if empty
  */
-export async function calculateBounds(
+export function calculateBounds(
   coordinates: [number, number][]
-): Promise<LatLngBounds | null> {
-  const rawBounds = calculateRawBounds(coordinates);
-  if (!rawBounds) return null;
-  
-  const L = await import('leaflet');
-  return L.latLngBounds(
-    [rawBounds.minLat, rawBounds.minLng],
-    [rawBounds.maxLat, rawBounds.maxLng]
-  );
+): [[number, number], [number, number]] | null {
+  const raw = calculateRawBounds(coordinates);
+  if (!raw) return null;
+  return [
+    [raw.minLng, raw.minLat],
+    [raw.maxLng, raw.maxLat],
+  ];
 }
 
 /**
- * Expands bounds by a percentage (async, client-only)
+ * Expands raw bounds by a percentage
  * @param bounds - Original bounds
  * @param percentage - Percentage to expand (e.g., 0.1 for 10%)
- * @returns Promise of expanded bounds
+ * @returns Expanded bounds
  */
-export async function expandBounds(
-  bounds: LatLngBounds,
-  percentage: number = 0.1
-): Promise<LatLngBounds> {
-  const L = await import('leaflet');
-  const sw = bounds.getSouthWest();
-  const ne = bounds.getNorthEast();
-  
-  const latDiff = (ne.lat - sw.lat) * percentage;
-  const lngDiff = (ne.lng - sw.lng) * percentage;
-  
-  return L.latLngBounds(
-    [sw.lat - latDiff, sw.lng - lngDiff],
-    [ne.lat + latDiff, ne.lng + lngDiff]
-  );
+export function expandBounds(bounds: RawBounds, percentage: number = 0.1): RawBounds {
+  const latDiff = (bounds.maxLat - bounds.minLat) * percentage;
+  const lngDiff = (bounds.maxLng - bounds.minLng) * percentage;
+
+  return {
+    minLat: bounds.minLat - latDiff,
+    maxLat: bounds.maxLat + latDiff,
+    minLng: bounds.minLng - lngDiff,
+    maxLng: bounds.maxLng + lngDiff,
+  };
 }
 
 /**
  * Checks if a coordinate is within bounds
  * @param coord - [latitude, longitude] tuple
- * @param bounds - Leaflet LatLngBounds object
+ * @param bounds - MapLibre LngLatBounds object
  * @returns True if coordinate is within bounds
  */
 export function isCoordinateInBounds(
   coord: [number, number],
-  bounds: LatLngBounds
+  bounds: LngLatBounds
 ): boolean {
-  const [lat, lng] = coord;
-  return bounds.contains([lat, lng]);
+  return bounds.contains(toLngLat(coord));
 }
 
 /**
  * Gets the center point of bounds
- * @param bounds - Leaflet LatLngBounds object
+ * @param bounds - MapLibre LngLatBounds object
  * @returns Center coordinate as [latitude, longitude]
  */
-export function getBoundsCenter(bounds: LatLngBounds): [number, number] {
+export function getBoundsCenter(bounds: LngLatBounds): [number, number] {
   const center = bounds.getCenter();
   return [center.lat, center.lng];
 }
 
 /**
- * Calculates the area of bounds in square meters (async, client-only)
- * @param bounds - Leaflet LatLngBounds object
- * @returns Promise of area in square meters (approximate)
+ * Calculates the area of bounds in square meters
+ * @param bounds - MapLibre LngLatBounds object
+ * @returns Area in square meters (approximate)
  */
-export async function calculateBoundsArea(bounds: LatLngBounds): Promise<number> {
-  const L = await import('leaflet');
+export function calculateBoundsArea(bounds: LngLatBounds): number {
   const sw = bounds.getSouthWest();
   const ne = bounds.getNorthEast();
-  const nw = L.latLng(ne.lat, sw.lng);
-  const se = L.latLng(sw.lat, ne.lng);
-  
-  // Calculate width and height using Haversine formula
-  const width = sw.distanceTo(se);
-  const height = sw.distanceTo(nw);
-  
+
+  // Width and height using the great-circle distance
+  const width = distanceMeters(sw, { lat: sw.lat, lng: ne.lng });
+  const height = distanceMeters(sw, { lat: ne.lat, lng: sw.lng });
+
   return width * height;
 }
 
 /**
- * Safe Leaflet access helpers
+ * DOM helpers for HTML markers and popups
+ */
+
+/** Escape text before interpolating it into marker/popup HTML. */
+export function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Build a marker/popup element from trusted HTML (escape user text first).
+ * @param html - Inner HTML
+ * @param className - Optional class for the wrapper element
+ */
+export function htmlElement(html: string, className = ''): HTMLDivElement {
+  const el = document.createElement('div');
+  if (className) el.className = className;
+  el.innerHTML = html.trim();
+  return el;
+}
+
+/**
+ * Safe MapLibre access helpers
  * Validates: Requirements 12.4
  */
 
-import type { Map as LeafletMap, Marker, TileLayer } from 'leaflet';
-
 /**
  * Safely gets the current zoom level from a map instance
- * @param map - Leaflet map instance
+ * @param map - MapLibre map instance
  * @param defaultZoom - Default value if map is null/undefined
  * @returns Current zoom level or default
  */
-export function safeGetZoom(map: LeafletMap | null | undefined, defaultZoom: number = 13): number {
+export function safeGetZoom(map: MapLibreMap | null | undefined, defaultZoom: number = 13): number {
   try {
     return map?.getZoom() ?? defaultZoom;
   } catch {
@@ -162,12 +184,12 @@ export function safeGetZoom(map: LeafletMap | null | undefined, defaultZoom: num
 
 /**
  * Safely gets the current center from a map instance
- * @param map - Leaflet map instance
+ * @param map - MapLibre map instance
  * @param defaultCenter - Default value if map is null/undefined
  * @returns Current center as [lat, lng] or default
  */
 export function safeGetCenter(
-  map: LeafletMap | null | undefined,
+  map: MapLibreMap | null | undefined,
   defaultCenter: [number, number] = [51.505, -0.09]
 ): [number, number] {
   try {
@@ -183,10 +205,10 @@ export function safeGetCenter(
 
 /**
  * Safely gets the current bounds from a map instance
- * @param map - Leaflet map instance
+ * @param map - MapLibre map instance
  * @returns Current bounds or null
  */
-export function safeGetBounds(map: LeafletMap | null | undefined) {
+export function safeGetBounds(map: MapLibreMap | null | undefined) {
   try {
     return map?.getBounds() ?? null;
   } catch {
@@ -195,20 +217,20 @@ export function safeGetBounds(map: LeafletMap | null | undefined) {
 }
 
 /**
- * Safely sets the view on a map instance
- * @param map - Leaflet map instance
- * @param center - Center coordinate
+ * Safely jumps (no animation) to a view on a map instance
+ * @param map - MapLibre map instance
+ * @param center - Center coordinate [lat, lng]
  * @param zoom - Zoom level
  * @returns True if successful
  */
 export function safeSetView(
-  map: LeafletMap | null | undefined,
+  map: MapLibreMap | null | undefined,
   center: [number, number],
   zoom: number
 ): boolean {
   try {
     if (!map) return false;
-    map.setView(center, zoom);
+    map.jumpTo({ center: toLngLat(center), zoom });
     return true;
   } catch {
     return false;
@@ -217,19 +239,19 @@ export function safeSetView(
 
 /**
  * Safely flies to a location on a map instance
- * @param map - Leaflet map instance
- * @param center - Center coordinate
+ * @param map - MapLibre map instance
+ * @param center - Center coordinate [lat, lng]
  * @param zoom - Zoom level
  * @returns True if successful
  */
 export function safeFlyTo(
-  map: LeafletMap | null | undefined,
+  map: MapLibreMap | null | undefined,
   center: [number, number],
   zoom: number
 ): boolean {
   try {
     if (!map) return false;
-    map.flyTo(center, zoom);
+    map.flyTo({ center: toLngLat(center), zoom, essential: true });
     return true;
   } catch {
     return false;
@@ -238,17 +260,17 @@ export function safeFlyTo(
 
 /**
  * Safely zooms in on a map instance
- * @param map - Leaflet map instance
+ * @param map - MapLibre map instance
  * @param delta - Zoom delta (default: 1)
  * @returns True if successful
  */
 export function safeZoomIn(
-  map: LeafletMap | null | undefined,
+  map: MapLibreMap | null | undefined,
   delta: number = 1
 ): boolean {
   try {
     if (!map) return false;
-    map.zoomIn(delta);
+    map.zoomTo(map.getZoom() + delta);
     return true;
   } catch {
     return false;
@@ -257,17 +279,17 @@ export function safeZoomIn(
 
 /**
  * Safely zooms out on a map instance
- * @param map - Leaflet map instance
+ * @param map - MapLibre map instance
  * @param delta - Zoom delta (default: 1)
  * @returns True if successful
  */
 export function safeZoomOut(
-  map: LeafletMap | null | undefined,
+  map: MapLibreMap | null | undefined,
   delta: number = 1
 ): boolean {
   try {
     if (!map) return false;
-    map.zoomOut(delta);
+    map.zoomTo(map.getZoom() - delta);
     return true;
   } catch {
     return false;
@@ -276,7 +298,7 @@ export function safeZoomOut(
 
 /**
  * Safely gets the position of a marker
- * @param marker - Leaflet marker instance
+ * @param marker - MapLibre marker instance
  * @param defaultPosition - Default position if marker is null/undefined
  * @returns Marker position as [lat, lng] or default
  */
@@ -285,9 +307,9 @@ export function safeGetMarkerPosition(
   defaultPosition: [number, number] = [0, 0]
 ): [number, number] {
   try {
-    const latLng = marker?.getLatLng();
-    if (latLng) {
-      return [latLng.lat, latLng.lng];
+    const lngLat = marker?.getLngLat();
+    if (lngLat) {
+      return [lngLat.lat, lngLat.lng];
     }
     return defaultPosition;
   } catch {
@@ -297,8 +319,8 @@ export function safeGetMarkerPosition(
 
 /**
  * Safely sets the position of a marker
- * @param marker - Leaflet marker instance
- * @param position - New position
+ * @param marker - MapLibre marker instance
+ * @param position - New position [lat, lng]
  * @returns True if successful
  */
 export function safeSetMarkerPosition(
@@ -307,7 +329,7 @@ export function safeSetMarkerPosition(
 ): boolean {
   try {
     if (!marker) return false;
-    marker.setLatLng(position);
+    marker.setLngLat(toLngLat(position));
     return true;
   } catch {
     return false;
@@ -315,18 +337,14 @@ export function safeSetMarkerPosition(
 }
 
 /**
- * Safely removes a layer from a map
- * @param map - Leaflet map instance
- * @param layer - Layer to remove
+ * Safely removes a marker from its map
+ * @param marker - Marker to remove
  * @returns True if successful
  */
-export function safeRemoveLayer(
-  map: LeafletMap | null | undefined,
-  layer: TileLayer | Marker | null | undefined
-): boolean {
+export function safeRemoveMarker(marker: Marker | null | undefined): boolean {
   try {
-    if (!map || !layer) return false;
-    map.removeLayer(layer);
+    if (!marker) return false;
+    marker.remove();
     return true;
   } catch {
     return false;
@@ -334,18 +352,18 @@ export function safeRemoveLayer(
 }
 
 /**
- * Safely adds a layer to a map
- * @param map - Leaflet map instance
- * @param layer - Layer to add
+ * Safely adds a marker to a map
+ * @param map - MapLibre map instance
+ * @param marker - Marker to add
  * @returns True if successful
  */
-export function safeAddLayer(
-  map: LeafletMap | null | undefined,
-  layer: TileLayer | Marker | null | undefined
+export function safeAddMarker(
+  map: MapLibreMap | null | undefined,
+  marker: Marker | null | undefined
 ): boolean {
   try {
-    if (!map || !layer) return false;
-    map.addLayer(layer);
+    if (!map || !marker) return false;
+    marker.addTo(map);
     return true;
   } catch {
     return false;
@@ -353,32 +371,14 @@ export function safeAddLayer(
 }
 
 /**
- * Safely checks if a map has a specific layer
- * @param map - Leaflet map instance
- * @param layer - Layer to check
- * @returns True if map has the layer
- */
-export function safeHasLayer(
-  map: LeafletMap | null | undefined,
-  layer: TileLayer | Marker | null | undefined
-): boolean {
-  try {
-    if (!map || !layer) return false;
-    return map.hasLayer(layer);
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Safely invalidates the map size (useful after container resize)
- * @param map - Leaflet map instance
+ * Safely resizes the map canvas (useful after container resize)
+ * @param map - MapLibre map instance
  * @returns True if successful
  */
-export function safeInvalidateSize(map: LeafletMap | null | undefined): boolean {
+export function safeResize(map: MapLibreMap | null | undefined): boolean {
   try {
     if (!map) return false;
-    map.invalidateSize();
+    map.resize();
     return true;
   } catch {
     return false;
@@ -387,17 +387,19 @@ export function safeInvalidateSize(map: LeafletMap | null | undefined): boolean 
 
 /**
  * Safely fits the map to bounds
- * @param map - Leaflet map instance
- * @param bounds - Bounds to fit
+ * @param map - MapLibre map instance
+ * @param bounds - Bounds to fit (`[[west, south], [east, north]]` or LngLatBounds)
+ * @param options - fitBounds options (padding, maxZoom, ...)
  * @returns True if successful
  */
 export function safeFitBounds(
-  map: LeafletMap | null | undefined,
-  bounds: L.LatLngBounds | null | undefined
+  map: MapLibreMap | null | undefined,
+  bounds: LngLatBoundsLike | null | undefined,
+  options?: FitBoundsOptions
 ): boolean {
   try {
     if (!map || !bounds) return false;
-    map.fitBounds(bounds);
+    map.fitBounds(bounds, options);
     return true;
   } catch {
     return false;

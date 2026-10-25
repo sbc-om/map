@@ -3,12 +3,15 @@
  */
 
 import type { ReactNode } from 'react';
-import type { Icon as LeafletIcon } from 'leaflet';
+import type { StyleSpecification } from 'maplibre-gl';
 
 /**
- * LeafletMap component props
+ * MapView component props
  */
-export interface LeafletMapProps {
+export interface MapViewProps {
+  /** Basemap style URL or inline style document */
+  mapStyle: string | StyleSpecification;
+  /** `[lat, lng]` */
   center?: [number, number];
   zoom?: number;
   minZoom?: number;
@@ -17,35 +20,8 @@ export interface LeafletMapProps {
   children?: ReactNode;
   onClick?: (lat: number, lng: number) => void;
   onMouseMove?: (lat: number, lng: number) => void;
+  /** CSS cursor over the map canvas; defaults to MapLibre's grab cursor */
   cursorStyle?: string;
-}
-
-/**
- * LeafletTileLayer component props
- */
-export interface LeafletTileLayerProps {
-  url: string;
-  /** Mirror URLs tried in order when `url` fails to load */
-  fallbackUrls?: string[];
-  /** CSS class for the tile container, e.g. a colour filter */
-  className?: string;
-  attribution?: string;
-  maxZoom?: number;
-  subdomains?: string[];
-  tileSize?: number;
-  zoomOffset?: number;
-  detectRetina?: boolean;
-}
-
-/**
- * LeafletMarker component props
- */
-export interface LeafletMarkerProps {
-  position: [number, number];
-  icon?: LeafletIcon;
-  popup?: string | ReactNode;
-  draggable?: boolean;
-  onDragEnd?: (position: [number, number]) => void;
 }
 
 /**

@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback } from 'react';
-import { useLeafletMap } from './useLeafletMap';
-import type { LatLngBounds } from 'leaflet';
+import { useMap } from './useMap';
+import { toLngLat } from '@/lib/map/geo';
+import type { FitBoundsOptions, LngLatBounds, LngLatBoundsLike } from 'maplibre-gl';
 
 /**
  * Hook providing safe map operations with null checks and error handling
@@ -13,7 +14,7 @@ import type { LatLngBounds } from 'leaflet';
  * @returns Object with safe map operation functions
  */
 export function useSafeMapOperations() {
-  const map = useLeafletMap();
+  const map = useMap();
 
   /**
    * Safely get current zoom level
@@ -44,7 +45,7 @@ export function useSafeMapOperations() {
   /**
    * Safely get current bounds
    */
-  const getBounds = useCallback((): LatLngBounds | null => {
+  const getBounds = useCallback((): LngLatBounds | null => {
     try {
       return map?.getBounds() ?? null;
     } catch {
@@ -53,12 +54,12 @@ export function useSafeMapOperations() {
   }, [map]);
 
   /**
-   * Safely set view
+   * Safely set view (instant jump, no animation). Center is [lat, lng].
    */
   const setView = useCallback((center: [number, number], zoom: number): boolean => {
     try {
       if (!map) return false;
-      map.setView(center, zoom);
+      map.jumpTo({ center: toLngLat(center), zoom });
       return true;
     } catch {
       return false;
@@ -66,12 +67,12 @@ export function useSafeMapOperations() {
   }, [map]);
 
   /**
-   * Safely fly to location
+   * Safely fly to location. Center is [lat, lng].
    */
   const flyTo = useCallback((center: [number, number], zoom: number): boolean => {
     try {
       if (!map) return false;
-      map.flyTo(center, zoom);
+      map.flyTo({ center: toLngLat(center), zoom, essential: true });
       return true;
     } catch {
       return false;
@@ -81,7 +82,7 @@ export function useSafeMapOperations() {
   /**
    * Safely fit bounds
    */
-  const fitBounds = useCallback((bounds: LatLngBounds, options?: L.FitBoundsOptions): boolean => {
+  const fitBounds = useCallback((bounds: LngLatBoundsLike, options?: FitBoundsOptions): boolean => {
     try {
       if (!map || !bounds) return false;
       map.fitBounds(bounds, options);
@@ -97,7 +98,7 @@ export function useSafeMapOperations() {
   const zoomIn = useCallback((delta: number = 1): boolean => {
     try {
       if (!map) return false;
-      map.zoomIn(delta);
+      map.zoomTo(map.getZoom() + delta);
       return true;
     } catch {
       return false;
@@ -110,7 +111,7 @@ export function useSafeMapOperations() {
   const zoomOut = useCallback((delta: number = 1): boolean => {
     try {
       if (!map) return false;
-      map.zoomOut(delta);
+      map.zoomTo(map.getZoom() - delta);
       return true;
     } catch {
       return false;
@@ -118,12 +119,12 @@ export function useSafeMapOperations() {
   }, [map]);
 
   /**
-   * Safely invalidate size (useful after container resize)
+   * Safely resize the map canvas (useful after container resize)
    */
-  const invalidateSize = useCallback((): boolean => {
+  const resize = useCallback((): boolean => {
     try {
       if (!map) return false;
-      map.invalidateSize();
+      map.resize();
       return true;
     } catch {
       return false;
@@ -131,12 +132,12 @@ export function useSafeMapOperations() {
   }, [map]);
 
   /**
-   * Safely pan to location
+   * Safely pan to location. Center is [lat, lng].
    */
   const panTo = useCallback((center: [number, number]): boolean => {
     try {
       if (!map) return false;
-      map.panTo(center);
+      map.panTo(toLngLat(center));
       return true;
     } catch {
       return false;
@@ -154,7 +155,7 @@ export function useSafeMapOperations() {
     fitBounds,
     zoomIn,
     zoomOut,
-    invalidateSize,
+    resize,
     panTo,
   };
 }

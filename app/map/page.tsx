@@ -10,7 +10,7 @@ import { MapMain, MapErrorBoundary, MapLoadingSpinner } from "@/components/map";
  *
  * Features:
  * - Modern Google Maps-style interface
- * - Full-screen map layout with Leaflet integration
+ * - Full-screen map layout rendered by MapLibre GL (vector tiles)
  * - Search functionality
  * - Category filters
  * - Layer controls and zoom controls
@@ -19,7 +19,7 @@ import { MapMain, MapErrorBoundary, MapLoadingSpinner } from "@/components/map";
  * - Loading spinner during initialization
  * - Responsive design
  *
- * This page demonstrates the MapMain component which combines Leaflet
+ * This page demonstrates the MapMain component which combines MapLibre GL
  * functionality with a modern, polished UI similar to Google Maps.
  */
 export default function MapPage() {

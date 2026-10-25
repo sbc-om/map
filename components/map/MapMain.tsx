@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { toast } from "sonner";
-import { LeafletMap } from "./LeafletMap";
-import { LeafletTileLayer } from "./LeafletTileLayer";
-import { LeafletGeoJSON } from "./LeafletGeoJSON";
+import { MapView } from "./MapView";
+import { MapGeoJSON } from "./MapGeoJSON";
 import { MapSearchBar } from "./MapSearchBar";
 import { MapTopBar } from "./MapTopBar";
 import { MapControls } from "./MapControls";
@@ -12,12 +11,12 @@ import { MapDetailsPanel } from "./MapDetailsPanel";
 import { MapMeasurementPanel } from "./MapMeasurementPanel";
 import { MapContextMenu } from "./MapContextMenu";
 import { MapPOIPanel } from "./MapPOIPanel";
-import { useMapTileProvider } from "@/hooks/useMapTileProvider";
+import { useMapStyle } from "@/hooks/useMapStyle";
 import { getCountryFeature } from "@/lib/countries";
 import { useMapContextMenu } from "@/hooks/useMapContextMenu";
 import { useMapMarkers } from "@/hooks/useMapMarkers";
 import { usePOIManager } from "@/hooks/usePOIManager";
-import { useLeafletMap } from "@/hooks/useLeafletMap";
+import { useMap } from "@/hooks/useMap";
 import type { POICategory } from "@/types/poi";
 
 // Memoized GeoJSON style
@@ -59,8 +58,8 @@ export function MapMain() {
   } | null>(null);
 
   // ── Hooks ──────────────────────────────────────────────────────────────────
-  const map = useLeafletMap();
-  const { tileProvider } = useMapTileProvider();
+  const map = useMap();
+  const { mapStyle } = useMapStyle();
   const { isOpen: isContextMenuOpen, position: contextMenuPosition, close: closeContextMenu } =
     useMapContextMenu();
   const { addMarker } = useMapMarkers();
@@ -78,9 +77,11 @@ export function MapMain() {
     const title = params.get("title") ? decodeURIComponent(params.get("title")!) : undefined;
 
     if (!isNaN(lat) && !isNaN(lng)) {
-      map.flyTo([lat, lng], !isNaN(zoom) ? zoom : 15, {
-        animate: true,
-        duration: 1.5,
+      map.flyTo({
+        center: [lng, lat],
+        zoom: !isNaN(zoom) ? zoom : 15,
+        duration: 1500,
+        essential: true,
       });
       if (showPin) {
         addMarker(lat, lng, title);
@@ -159,9 +160,7 @@ export function MapMain() {
     setIsPOIPanelOpen(true);
   }, []);
   const handleContextMenuDirections = useCallback(
-    (_lat: number, _lng: number) => {
-      handleDirectionsOpen();
-    },
+    () => handleDirectionsOpen(),
     [handleDirectionsOpen]
   );
 
@@ -264,52 +263,20 @@ export function MapMain() {
   // Is any left-side panel currently open? Used to shift the search bar and hide category pills.
   const isLeftPanelOpen = isPOIPanelOpen || !!selectedCountry;
 
-  // Memoised tile props
-  const tileLayerProps = useMemo(
-    () => ({
-      url: tileProvider.url,
-      fallbackUrls: tileProvider.fallbackUrls,
-      className: tileProvider.className,
-      attribution: tileProvider.attribution,
-      maxZoom: tileProvider.maxZoom,
-      tileSize: tileProvider.tileSize,
-      zoomOffset: tileProvider.zoomOffset,
-      detectRetina: tileProvider.detectRetina,
-    }),
-    [
-      tileProvider.url,
-      tileProvider.fallbackUrls,
-      tileProvider.className,
-      tileProvider.attribution,
-      tileProvider.maxZoom,
-      tileProvider.tileSize,
-      tileProvider.zoomOffset,
-      tileProvider.detectRetina,
-    ]
-  );
-
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="relative h-dvh-screen w-full overflow-hidden">
       {/* ── Map ── */}
-      <LeafletMap
+      <MapView
+        mapStyle={mapStyle.style}
         className="w-full h-full"
         onClick={handleMapClick}
         onMouseMove={handleMapMouseMove}
-        cursorStyle={isSelectingPOILocation ? "crosshair" : "grab"}
+        // undefined → MapLibre's own grab/grabbing cursors
+        cursorStyle={isSelectingPOILocation ? "crosshair" : undefined}
       >
-        <LeafletTileLayer
-          url={tileLayerProps.url}
-          fallbackUrls={tileLayerProps.fallbackUrls}
-          className={tileLayerProps.className}
-          attribution={tileLayerProps.attribution}
-          maxZoom={tileLayerProps.maxZoom}
-          tileSize={tileLayerProps.tileSize}
-          zoomOffset={tileLayerProps.zoomOffset}
-          detectRetina={tileLayerProps.detectRetina}
-        />
-        <LeafletGeoJSON data={selectedCountry} style={GEOJSON_STYLE} />
-      </LeafletMap>
+        <MapGeoJSON data={selectedCountry} style={GEOJSON_STYLE} />
+      </MapView>
 
       {/* ── Search Bar ── */}
       <MapSearchBar

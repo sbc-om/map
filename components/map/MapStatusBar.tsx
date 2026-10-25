@@ -1,8 +1,8 @@
 "use client";
 
-import { memo, useState, useEffect } from "react";
-import { useLeafletMap } from "@/hooks/useLeafletMap";
-import type { LeafletMouseEvent } from "leaflet";
+import { memo, useState, useEffect, useCallback, useSyncExternalStore } from "react";
+import { useMap } from "@/hooks/useMap";
+import type { MapMouseEvent } from "maplibre-gl";
 
 /** Format decimal degrees → degrees-minutes-seconds string */
 function toDMS(val: number, axis: "lat" | "lng"): string {
@@ -20,25 +20,37 @@ function toDMS(val: number, axis: "lat" | "lng"): string {
  * Non-interactive (pointer-events-none), no layout impact on other controls.
  */
 export const MapStatusBar = memo(function MapStatusBar() {
-  const map = useLeafletMap();
+  const map = useMap();
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [zoom, setZoom] = useState<number | null>(null);
+
+  // Zoom is read straight from the map; MapLibre zoom is fractional, show whole levels
+  const subscribeZoom = useCallback(
+    (onChange: () => void) => {
+      if (!map) return () => {};
+      map.on("zoomend", onChange);
+      return () => {
+        map.off("zoomend", onChange);
+      };
+    },
+    [map]
+  );
+  const zoom = useSyncExternalStore(
+    subscribeZoom,
+    () => (map ? Math.round(map.getZoom()) : null),
+    () => null
+  );
 
   useEffect(() => {
     if (!map) return;
-    setZoom(map.getZoom());
 
-    const onMove  = (e: LeafletMouseEvent) => setCoords({ lat: e.latlng.lat, lng: e.latlng.lng });
-    const onZoom  = () => setZoom(map.getZoom());
+    const onMove  = (e: MapMouseEvent) => setCoords({ lat: e.lngLat.lat, lng: e.lngLat.lng });
     const onLeave = () => setCoords(null);
 
     map.on("mousemove", onMove);
-    map.on("zoomend",   onZoom);
     map.on("mouseout",  onLeave);
 
     return () => {
       map.off("mousemove", onMove);
-      map.off("zoomend",   onZoom);
       map.off("mouseout",  onLeave);
     };
   }, [map]);

@@ -1,13 +1,13 @@
 'use client';
 
 import { useCallback } from 'react';
-import { useLeafletMap } from './useLeafletMap';
+import { useMap } from './useMap';
 
 /**
  * Hook for controlling map zoom and fullscreen
  */
 export function useMapControls() {
-    const map = useLeafletMap();
+    const map = useMap();
 
     const zoomIn = useCallback(() => {
         if (map) {
@@ -34,7 +34,7 @@ export function useMapControls() {
     const resetView = useCallback(() => {
         if (map) {
             // Reset to Oman default view
-            map.flyTo([22.5796, 58.4093], 7, { animate: true, duration: 1.2 });
+            map.flyTo({ center: [58.4093, 22.5796], zoom: 7, duration: 1200, essential: true });
         }
     }, [map]);
 

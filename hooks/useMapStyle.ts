@@ -1,32 +1,21 @@
 import { useMemo } from "react";
 import { useTheme } from "@/hooks/useTheme";
-import {
-  getTileProviderById,
-  getDefaultTileProvider,
-} from "@/constants/tile-providers";
-import type { TileProvider } from "@/types/map";
+import { getMapStyleById, getDefaultMapStyle } from "@/constants/map-styles";
+import type { MapStyleOption } from "@/types/map";
 
 /**
- * Custom hook to manage the base map from the app theme only.
- *
- * Light theme → default/standard basemap
- * Dark theme → dark basemap
- * 
- * Map-style switching is intentionally disabled to keep the UI minimal.
+ * Basemap style that follows the app theme: streets in light mode, the dark
+ * vector style in dark mode. An explicit `overrideId` (e.g. satellite) wins.
  */
-export function useMapTileProvider() {
+export function useMapStyle(overrideId?: string | null) {
   const { theme } = useTheme();
 
-  const tileProvider = useMemo<TileProvider>(() => {
-    if (theme === "dark") {
-      return getTileProviderById("dark") || getDefaultTileProvider();
-    }
+  const mapStyle = useMemo<MapStyleOption>(() => {
+    const override = overrideId ? getMapStyleById(overrideId) : undefined;
+    if (override) return override;
+    if (theme === "dark") return getMapStyleById("dark") ?? getDefaultMapStyle();
+    return getDefaultMapStyle();
+  }, [theme, overrideId]);
 
-    return getDefaultTileProvider();
-  }, [theme]);
-
-  return {
-    tileProvider,
-    currentProviderId: theme === "dark" ? "dark" : "streets",
-  };
+  return { mapStyle, currentStyleId: mapStyle.id };
 }
