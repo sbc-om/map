@@ -37,7 +37,7 @@ export interface DirectionResult {
 
 const ROUTE_OVERLAY_ID = "directions-route";
 
-/** White casing under a blue line, as in the Leaflet version. */
+/** White casing under a blue line. */
 const ROUTE_LAYERS = [
   {
     id: "outline",

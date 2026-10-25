@@ -11,9 +11,9 @@ export function TechStack() {
       alt: "Next.js logo",
     },
     {
-      name: "Leaflet",
-      logo: "/logos/leaflet.svg",
-      alt: "Leaflet logo",
+      name: "MapLibre GL",
+      logo: "/logos/maplibre.svg",
+      alt: "MapLibre logo",
     },
     {
       name: "Tailwind CSS",

@@ -359,8 +359,8 @@
 }
 
 /* ── Draggable POI preview marker ─────────────────────────────────────────── */
-/*  .poi-preview-marker is placed on the Leaflet icon wrapper (via divIcon      */
-/*  className). touch-action:none is essential for mobile drag to work.         */
+/*  .poi-preview-marker is placed on the marker element                  */
+/*  touch-action:none is essential for mobile drag to work.         */
 .poi-preview-marker {
   cursor: grab;
   touch-action: none !important;

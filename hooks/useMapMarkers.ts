@@ -61,7 +61,7 @@ export function useMapMarkers() {
   </div>
 </div>`);
 
-    // Popup tip sits just above the pin head (Leaflet popupAnchor [0, -64])
+    // Popup tip sits just above the pin head
     const popup = new Popup({ offset: 64, maxWidth: '260px' }).setDOMContent(popupEl);
 
     const mapMarker = new Marker({ element, anchor: 'bottom', draggable: true })

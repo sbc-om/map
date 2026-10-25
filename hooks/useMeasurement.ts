@@ -14,7 +14,7 @@ interface MeasurementPoint {
 
 const OVERLAY_ID = 'measurement';
 
-/** Polygon fill/outline, dashed distance line and vertex dots (Leaflet look). */
+/** Polygon fill/outline, dashed distance line and vertex dots (same look as before the MapLibre switch). */
 const OVERLAY_LAYERS = [
   {
     id: 'fill',
