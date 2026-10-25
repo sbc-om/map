@@ -25,7 +25,7 @@ import {
   TextInput,
 } from "./ui";
 import { RideChat } from "./RideChat";
-import { useTaxiMap } from "@/hooks/useTaxiMap";
+import { overlayPadding, useTaxiMap } from "@/hooks/useTaxiMap";
 import { useDrivers, usePassengerSession, useRide } from "@/hooks/useTaxiStore";
 import {
   createPassengerSession,
@@ -36,8 +36,13 @@ import {
 } from "@/lib/taxi/actions";
 import { getRouteEstimate, reverseGeocode } from "@/lib/taxi/routing";
 import { calculateFare, formatFare } from "@/lib/taxi/fare";
-import { findNearbyDrivers } from "@/lib/taxi/matching";
-import { VEHICLE_TYPES, DRIVER_STALE_MS, DRIVER_APPROACH_MS } from "@/constants/taxi-config";
+import { findNearbyDrivers, haversineKm } from "@/lib/taxi/matching";
+import {
+  VEHICLE_TYPES,
+  DRIVER_STALE_MS,
+  DRIVER_APPROACH_MS,
+  MATCH_RADIUS_KM,
+} from "@/constants/taxi-config";
 import type { RouteInfo, TaxiPlace } from "@/types/taxi";
 
 interface PassengerFlowProps {
@@ -248,16 +253,47 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
     return findNearbyDrivers({ pickup }, Object.values(drivers), undefined, now);
   }, [pickup, drivers, now]);
 
-  // ── All online taxis (live) — always visible on the map, even before a
-  //    pickup is chosen, so the passenger can see cars moving around. ─────────
+  // ── All online taxis within the service radius (live) — visible on the map
+  //    even before a pickup is chosen, so the passenger can see cars moving
+  //    around. Without a pickup there is no reference point, so show them all.
   const onlineDrivers = useMemo(() => {
     return Object.values(drivers).filter(
       (d) =>
         d.status === "ONLINE" &&
         d.location !== null &&
-        now - d.lastSeen <= DRIVER_STALE_MS
+        now - d.lastSeen <= DRIVER_STALE_MS &&
+        (!pickup || haversineKm(pickup, d.location) <= MATCH_RADIUS_KM)
     );
-  }, [drivers, now]);
+  }, [drivers, now, pickup]);
+
+  // Taxis can be up to 100 km away, far outside the default view. When none
+  // of them is on screen, zoom out once to frame the passenger and the
+  // nearest taxis (re-armed when the last taxi goes away).
+  const revealedTaxisRef = useRef(false);
+  useEffect(() => {
+    const map = taxiMap.map;
+    if (onlineDrivers.length === 0) {
+      revealedTaxisRef.current = false;
+      return;
+    }
+    if (!map || ride || revealedTaxisRef.current) return;
+    revealedTaxisRef.current = true;
+
+    const view = map.getBounds();
+    if (onlineDrivers.some((d) => view.contains([d.location!.lat, d.location!.lng]))) {
+      return;
+    }
+    const center = map.getCenter();
+    const origin = pickup ?? { lat: center.lat, lng: center.lng };
+    const nearest = [...onlineDrivers]
+      .sort((a, b) => haversineKm(origin, a.location!) - haversineKm(origin, b.location!))
+      .slice(0, 3);
+    const points: [number, number][] = [
+      [origin.lat, origin.lng],
+      ...nearest.map((d): [number, number] => [d.location!.lat, d.location!.lng]),
+    ];
+    map.flyToBounds(points, { ...overlayPadding(), maxZoom: 14, duration: 1.2 });
+  }, [taxiMap.map, ride, onlineDrivers, pickup]);
 
   // ── Assigned driver (once a taxi accepts the ride) ─────────────────────────
   const assignedDriver = ride?.driverId ? drivers[ride.driverId] : undefined;
@@ -654,7 +690,7 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
         <p className="flex items-center gap-1.5 text-xs text-white/45">
           <Navigation className="h-3.5 w-3.5 text-amber-400" />
           {nearbyDrivers.length > 0
-            ? `${nearbyDrivers.length} driver${nearbyDrivers.length > 1 ? "s" : ""} nearby`
+            ? `${nearbyDrivers.length} taxi${nearbyDrivers.length > 1 ? "s" : ""} within ${MATCH_RADIUS_KM} km`
             : onlineDrivers.length > 0
             ? `${onlineDrivers.length} taxi${onlineDrivers.length > 1 ? "s" : ""} online — shown on the map`
             : "No taxis online right now"}

@@ -33,6 +33,51 @@ type MarkerMotion = {
 
 type CarOptions = { vehicle: VehicleType; self?: boolean; offline?: boolean };
 
+/**
+ * Fit padding that keeps framed content clear of the taxi UI: the side panel
+ * on desktop, the bottom sheet on mobile.
+ */
+export function overlayPadding(): {
+  paddingTopLeft: [number, number];
+  paddingBottomRight: [number, number];
+} {
+  if (typeof window === "undefined" || window.innerWidth < 640) {
+    const sheet = typeof window === "undefined" ? 300 : Math.round(window.innerHeight * 0.45);
+    return { paddingTopLeft: [40, 80], paddingBottomRight: [40, sheet] };
+  }
+  return { paddingTopLeft: [440, 70], paddingBottomRight: [70, 70] };
+}
+
+/** Map centre that puts `point` in the middle of the area not covered by the UI. */
+function visibleCenterFor(map: LeafletMap, point: LatLng, zoom: number) {
+  const {
+    paddingTopLeft: [left, top],
+    paddingBottomRight: [right, bottom],
+  } = overlayPadding();
+  const projected = map
+    .project([point.lat, point.lng], zoom)
+    .subtract([(left - right) / 2, (top - bottom) / 2]);
+  return map.unproject(projected, zoom);
+}
+
+/** True when `point` sits comfortably inside the area not covered by the UI. */
+function inComfortZone(map: LeafletMap, point: LatLng) {
+  const {
+    paddingTopLeft: [left, top],
+    paddingBottomRight: [right, bottom],
+  } = overlayPadding();
+  const size = map.getSize();
+  const p = map.latLngToContainerPoint([point.lat, point.lng]);
+  const marginX = (size.x - left - right) * 0.2;
+  const marginY = (size.y - top - bottom) * 0.2;
+  return (
+    p.x >= left + marginX &&
+    p.x <= size.x - right - marginX &&
+    p.y >= top + marginY &&
+    p.y <= size.y - bottom - marginY
+  );
+}
+
 /** Glide pacing bounds: match the update interval so motion is continuous. */
 const MIN_GLIDE_MS = 300;
 const MAX_GLIDE_MS = 5200;
@@ -92,11 +137,11 @@ const VEHICLE_STYLE: Record<
   VehicleType,
   { body: string; roof: string; width: number; length: number }
 > = {
-  taxi: { body: "#facc15", roof: "#eab308", width: 22, length: 40 },
-  economy: { body: "#f8fafc", roof: "#cbd5e1", width: 22, length: 40 },
-  comfort: { body: "#1e293b", roof: "#334155", width: 23, length: 42 },
-  xl: { body: "#e2e8f0", roof: "#94a3b8", width: 24, length: 47 },
-  bike: { body: "#f97316", roof: "#1f2937", width: 12, length: 30 },
+  taxi: { body: "#facc15", roof: "#eab308", width: 25, length: 46 },
+  economy: { body: "#f8fafc", roof: "#cbd5e1", width: 25, length: 46 },
+  comfort: { body: "#1e293b", roof: "#334155", width: 26, length: 48 },
+  xl: { body: "#e2e8f0", roof: "#94a3b8", width: 27, length: 52 },
+  bike: { body: "#f97316", roof: "#1f2937", width: 13, length: 33 },
 };
 
 /** Top-down vehicle drawing, nose pointing up (north). */
@@ -145,8 +190,8 @@ function carIcon(L: LType, { vehicle, self, offline }: CarOptions) {
     className: classes,
     html: `<div class="taxi-car-marker__halo"></div>
       <div class="taxi-car-marker__body">${vehicleSvg(vehicle)}</div>`,
-    iconSize: [56, 56],
-    iconAnchor: [28, 28],
+    iconSize: [60, 60],
+    iconAnchor: [30, 30],
   });
 }
 
@@ -201,7 +246,11 @@ export function useTaxiMap() {
 
   const flyTo = useCallback(
     (point: LatLng, zoom = 15) => {
-      map?.flyTo([point.lat, point.lng], zoom, { duration: 1.1, easeLinearity: 0.2 });
+      if (!map) return;
+      map.flyTo(visibleCenterFor(map, point, zoom), zoom, {
+        duration: 1.1,
+        easeLinearity: 0.2,
+      });
     },
     [map]
   );
@@ -304,7 +353,7 @@ export function useTaxiMap() {
         // Draw the route once the camera has settled on it; a zoom mid-draw
         // would change the path length and cut the animation short.
         group.eachLayer((l) => (l as Polyline).setStyle({ opacity: 0 }));
-        map.flyToBounds(line.getBounds(), { padding: [70, 70], duration: 0.9 });
+        map.flyToBounds(line.getBounds(), { ...overlayPadding(), duration: 0.9 });
         map.once("moveend", () => {
           outline.setStyle({ opacity: 0.9 });
           line.setStyle({ opacity: 0.95 });
@@ -451,11 +500,12 @@ export function useTaxiMap() {
         selfDragEndRef.current = handler;
       }
 
-      if (opts?.follow) {
-        const comfortZone = map.getBounds().pad(-0.3);
-        if (!comfortZone.contains([point.lat, point.lng])) {
-          map.panTo([point.lat, point.lng], { animate: true, duration: 0.8, easeLinearity: 0.25 });
-        }
+      if (opts?.follow && !inComfortZone(map, point)) {
+        map.panTo(visibleCenterFor(map, point, map.getZoom()), {
+          animate: true,
+          duration: 0.8,
+          easeLinearity: 0.25,
+        });
       }
     },
     [ensureL, map]

@@ -32,8 +32,12 @@ export const DRIVER_TRIP_MS = 240_000;
 /** How often the approach simulation broadcasts a new position (ms) */
 export const APPROACH_TICK_MS = 1_000;
 
-/** Maximum search radius for the matching engine (kilometres) */
-export const MATCH_RADIUS_KM = 15;
+/**
+ * Service radius (kilometres): passengers see every online taxi within this
+ * distance, and drivers receive ride requests from this far away, so any taxi
+ * a passenger can see is able to take their ride.
+ */
+export const MATCH_RADIUS_KM = 100;
 
 /** Default pickup location when geolocation is unavailable (Muscat) */
 export const DEFAULT_PICKUP: [number, number] = [23.588, 58.3829];
