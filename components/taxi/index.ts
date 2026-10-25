@@ -1,5 +1,5 @@
 /**
- * Taxi dispatch module component exports (OmanTaxi).
+ * Taxi dispatch module component exports (Taxi).
  */
 export { TaxiMain } from "./TaxiMain";
 export { TaxiModeSelect } from "./TaxiModeSelect";

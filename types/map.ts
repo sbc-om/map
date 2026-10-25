@@ -23,6 +23,10 @@ export interface TileProvider {
   id: string;
   name: string;
   url: string;
+  /** Mirror URLs tried in order when `url` fails to load */
+  fallbackUrls?: string[];
+  /** CSS class for the tile container, e.g. a colour filter */
+  className?: string;
   attribution: string;
   maxZoom: number;
   tileSize?: number;

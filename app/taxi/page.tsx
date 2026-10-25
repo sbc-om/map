@@ -2,7 +2,7 @@ import { MapProvider, MapErrorBoundary, MapLoadingSpinner } from "@/components/m
 import { TaxiMain } from "@/components/taxi";
 
 /**
- * OmanTaxi dispatch page (Server Component).
+ * Taxi dispatch page (Server Component).
  *
  * Wraps the taxi experience in the shared MapProvider so passenger and driver
  * flows can use the Leaflet map. The role is preselected client-side from the

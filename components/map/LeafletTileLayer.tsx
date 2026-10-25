@@ -7,6 +7,14 @@ import type { LeafletTileLayerProps } from "@/types/components";
 
 // Default subdomains - defined outside component to maintain referential stability
 const DEFAULT_SUBDOMAINS = ["a", "b", "c"];
+const NO_FALLBACKS: string[] = [];
+
+/** Highest zoom the layer will display; beyond the provider's native zoom tiles are upscaled. */
+const OVERZOOM_MAX = 20;
+/** Switch servers if no tile has loaded this long after (re)starting a source. */
+const FIRST_TILE_TIMEOUT_MS = 7000;
+/** Errors tolerated before a source that has never loaded a tile is abandoned. */
+const ERRORS_BEFORE_FIRST_TILE = 4;
 
 /**
  * LeafletTileLayer component - Manages tile layer rendering
@@ -15,18 +23,19 @@ const DEFAULT_SUBDOMAINS = ["a", "b", "c"];
  * tile layer updates when the URL changes and cleanup on unmount.
  *
  * Features:
- * - Adds tile layer to map on mount
- * - Updates tile layer when URL changes
- * - Removes tile layer on unmount
- * - Supports custom attribution and zoom levels
- * - Handles subdomains for load balancing
- * - Prevents infinite loops from array prop changes
- * - Uses AbortController pattern for safe async cleanup
+ * - Adds tile layer to map on mount, removes it on unmount
+ * - Automatic failover: when the active server is blocked, rate-limited or
+ *   silent, the layer switches to the next of `fallbackUrls` in place
+ * - Loads tiles while panning and keeps a wide buffer, so dragging never
+ *   reveals empty grey squares
+ * - Upscales the provider's deepest tiles instead of going blank past its
+ *   native max zoom
  *
  * @example
  * ```tsx
  * <LeafletTileLayer
- *   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+ *   url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+ *   fallbackUrls={["https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"]}
  *   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
  *   maxZoom={19}
  * />
@@ -34,6 +43,8 @@ const DEFAULT_SUBDOMAINS = ["a", "b", "c"];
  */
 export function LeafletTileLayer({
   url,
+  fallbackUrls = NO_FALLBACKS,
+  className = "",
   attribution = "",
   maxZoom = 19,
   subdomains = DEFAULT_SUBDOMAINS,
@@ -44,8 +55,9 @@ export function LeafletTileLayer({
   const map = useLeafletMap();
   const tileLayerRef = useRef<TileLayer | null>(null);
 
-  // Memoize subdomains to prevent infinite loops from array reference changes
+  // Join arrays into keys so new array references don't re-create the layer
   const subdomainsKey = useMemo(() => subdomains.join(","), [subdomains]);
+  const fallbackKey = useMemo(() => fallbackUrls.join("|"), [fallbackUrls]);
 
   useEffect(() => {
     // Wait for map to be ready
@@ -60,6 +72,7 @@ export function LeafletTileLayer({
     }
 
     let isMounted = true;
+    let watchdog: ReturnType<typeof setTimeout> | undefined;
 
     const setupTileLayer = async () => {
       try {
@@ -80,30 +93,61 @@ export function LeafletTileLayer({
           tileLayerRef.current = null;
         }
 
-        // Parse subdomains from memoized key
-        const subdomainsList = subdomainsKey.split(",");
+        const sources = [url, ...(fallbackKey ? fallbackKey.split("|") : [])];
+        let sourceIndex = 0;
+        let loaded = 0;
+        let errors = 0;
 
-        // Create and add new tile layer
         const tileLayer = L.tileLayer(url, {
           attribution,
-          maxZoom,
-          subdomains: subdomainsList,
+          className,
+          maxNativeZoom: maxZoom,
+          maxZoom: Math.max(maxZoom, OVERZOOM_MAX),
+          subdomains: subdomainsKey.split(","),
           tileSize,
           zoomOffset,
           detectRetina,
-          updateWhenIdle: true,
+          // Fetch tiles during the pan, not only after it ends
+          updateWhenIdle: false,
           updateWhenZooming: false,
-          keepBuffer: 4,
-          crossOrigin: true,
+          updateInterval: 100,
+          keepBuffer: 6,
         });
 
-        // Add error handling for tile loading
-        tileLayer.on("tileerror", (error) => {
-          console.error("Tile loading error:", error);
+        const armWatchdog = () => {
+          clearTimeout(watchdog);
+          watchdog = setTimeout(() => {
+            if (loaded === 0) switchSource("no tiles received");
+          }, FIRST_TILE_TIMEOUT_MS);
+        };
+
+        const switchSource = (reason: string) => {
+          if (!isMounted || sourceIndex >= sources.length - 1) return;
+          sourceIndex += 1;
+          loaded = 0;
+          errors = 0;
+          console.warn(
+            `Tile server failed (${reason}); switching to ${sources[sourceIndex]}`
+          );
+          tileLayer.setUrl(sources[sourceIndex]);
+          armWatchdog();
+        };
+
+        tileLayer.on("tileload", () => {
+          loaded += 1;
+          if (loaded === 1) clearTimeout(watchdog);
+        });
+
+        tileLayer.on("tileerror", () => {
+          errors += 1;
+          const neverLoaded = loaded === 0 && errors >= ERRORS_BEFORE_FIRST_TILE;
+          const mostlyFailing = errors > 12 && errors > loaded * 2;
+          if (neverLoaded || mostlyFailing) switchSource(`${errors} tile errors`);
         });
 
         tileLayer.addTo(map);
         tileLayerRef.current = tileLayer;
+        armWatchdog();
       } catch (error) {
         if (isMounted) {
           console.error("Failed to add tile layer:", error);
@@ -116,6 +160,7 @@ export function LeafletTileLayer({
     // Cleanup function
     return () => {
       isMounted = false;
+      clearTimeout(watchdog);
       if (tileLayerRef.current) {
         try {
           tileLayerRef.current.remove();
@@ -128,6 +173,8 @@ export function LeafletTileLayer({
   }, [
     map,
     url,
+    fallbackKey,
+    className,
     attribution,
     maxZoom,
     subdomainsKey,

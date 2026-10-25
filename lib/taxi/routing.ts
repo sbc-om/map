@@ -1,16 +1,14 @@
 /**
  * Routing & geocoding helpers for the taxi module.
  *
- * Uses free, key-less public services:
- * - OSRM (router.project-osrm.org) for driving routes.
+ * Uses free, key-less public services via lib/geo-services (with timeouts
+ * and a backup OSRM server):
+ * - OSRM for driving routes.
  * - Nominatim (nominatim.openstreetmap.org) for forward/reverse geocoding.
  */
 
 import type { LatLng, RouteInfo, TaxiPlace } from "@/types/taxi";
-
-const NOMINATIM = "https://nominatim.openstreetmap.org";
-const OSRM = "https://router.project-osrm.org";
-const USER_AGENT = "OmanTaxi/1.0 (https://map.sbc.om)";
+import { nominatimReverse, nominatimSearch, osrmDrivingRoute } from "@/lib/geo-services";
 
 /** Forward geocode a free-text query into ranked place suggestions. */
 export async function geocode(
@@ -20,18 +18,15 @@ export async function geocode(
   const trimmed = query.trim();
   if (!trimmed) return [];
 
-  const url =
-    `${NOMINATIM}/search?q=${encodeURIComponent(trimmed)}` +
-    `&format=json&limit=${limit}&accept-language=en&countrycodes=om`;
-
-  const res = await fetch(url, { headers: { "User-Agent": USER_AGENT } });
-  if (!res.ok) throw new Error("Address search failed");
-
-  const data = (await res.json()) as Array<{
-    display_name: string;
-    lat: string;
-    lon: string;
-  }>;
+  let data: Array<{ display_name: string; lat: string; lon: string }>;
+  try {
+    data = await nominatimSearch(
+      `q=${encodeURIComponent(trimmed)}` +
+        `&format=json&limit=${limit}&accept-language=en&countrycodes=om`
+    );
+  } catch {
+    throw new Error("Address search failed");
+  }
 
   return data.map((item) => ({
     address: item.display_name,
@@ -42,14 +37,10 @@ export async function geocode(
 
 /** Reverse geocode a coordinate into a human-readable address. */
 export async function reverseGeocode(point: LatLng): Promise<string> {
-  const url =
-    `${NOMINATIM}/reverse?lat=${point.lat}&lon=${point.lng}` +
-    `&format=json&accept-language=en`;
-
   try {
-    const res = await fetch(url, { headers: { "User-Agent": USER_AGENT } });
-    if (!res.ok) throw new Error("Reverse geocode failed");
-    const data = (await res.json()) as { display_name?: string };
+    const data = await nominatimReverse<{ display_name?: string }>(
+      `lat=${point.lat}&lon=${point.lng}&format=json&accept-language=en`
+    );
     return data.display_name ?? formatLatLng(point);
   } catch {
     return formatLatLng(point);
@@ -58,15 +49,7 @@ export async function reverseGeocode(point: LatLng): Promise<string> {
 
 /** Compute a driving route between two points using OSRM. */
 export async function getRoute(from: LatLng, to: LatLng): Promise<RouteInfo> {
-  const url =
-    `${OSRM}/route/v1/driving/` +
-    `${from.lng},${from.lat};${to.lng},${to.lat}` +
-    `?geometries=geojson&overview=full`;
-
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("Routing service unavailable");
-
-  const data = (await res.json()) as {
+  let data: {
     code: string;
     routes?: Array<{
       distance: number;
@@ -74,8 +57,16 @@ export async function getRoute(from: LatLng, to: LatLng): Promise<RouteInfo> {
       geometry: { coordinates: [number, number][] };
     }>;
   };
+  try {
+    data = await osrmDrivingRoute(
+      `${from.lng},${from.lat};${to.lng},${to.lat}` +
+        `?geometries=geojson&overview=full`
+    );
+  } catch {
+    throw new Error("No route found between these locations");
+  }
 
-  if (data.code !== "Ok" || !data.routes?.length) {
+  if (!data.routes?.length) {
     throw new Error("No route found between these locations");
   }
 

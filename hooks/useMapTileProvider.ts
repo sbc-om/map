@@ -27,6 +27,6 @@ export function useMapTileProvider() {
 
   return {
     tileProvider,
-    currentProviderId: theme === "dark" ? "dark" : "osm",
+    currentProviderId: theme === "dark" ? "dark" : "streets",
   };
 }

@@ -1,5 +1,5 @@
 /**
- * Taxi dispatch configuration constants (OmanTaxi)
+ * Taxi dispatch configuration constants (Taxi)
  */
 
 import type { VehicleType } from "@/types/taxi";

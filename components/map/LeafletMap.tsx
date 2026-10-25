@@ -122,11 +122,22 @@ export function LeafletMap({
           maxZoom,
           zoomControl: DEFAULT_MAP_CONFIG.zoomControl,
           attributionControl: DEFAULT_MAP_CONFIG.attributionControl,
-          // Disable the tile fade-in. The cross-fade between old/new tiles is
-          // the main cause of the thin grey "grid" lines at tile boundaries
-          // (overlapping semi-transparent tile edges). Turning it off makes the
-          // basemap render seamless, like openstreetmap.org.
-          fadeAnimation: false,
+          // Tiles cross-fade in; tile borders are reset in globals.css so
+          // the fade doesn't leave grid lines.
+          fadeAnimation: true,
+          zoomAnimation: true,
+          markerZoomAnimation: true,
+          // Long, gentle glide after a flick-drag
+          inertia: true,
+          inertiaDeceleration: 2200,
+          inertiaMaxSpeed: 2400,
+          easeLinearity: 0.18,
+          // Responsive wheel / trackpad zoom without overshooting levels
+          wheelDebounceTime: 30,
+          wheelPxPerZoomLevel: 90,
+          zoomAnimationThreshold: 6,
+          bounceAtZoomLimits: false,
+          worldCopyJump: true,
         });
 
         // Mark as initialized before storing reference
@@ -216,7 +227,7 @@ export function LeafletMap({
     const zoomChanged = currentZoom !== zoom;
 
     if (centerChanged || zoomChanged) {
-      mapRef.current.setView(center, zoom, { animate: true });
+      mapRef.current.flyTo(center, zoom, { duration: 0.9, easeLinearity: 0.2 });
     }
   }, [center, zoom]);
 

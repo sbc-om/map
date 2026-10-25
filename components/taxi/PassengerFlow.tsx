@@ -673,7 +673,7 @@ const STATUS_COPY: Record<string, { title: string; sub: string }> = {
   ACCEPTED: { title: "Driver on the way", sub: "Your driver is heading to the pickup" },
   ARRIVED: { title: "Driver has arrived", sub: "Your taxi is waiting at the pickup" },
   IN_PROGRESS: { title: "On the way", sub: "Enjoy your ride" },
-  COMPLETED: { title: "Trip completed", sub: "Thanks for riding with OmanTaxi" },
+  COMPLETED: { title: "Trip completed", sub: "Thanks for riding with Taxi" },
   NO_DRIVERS: { title: "No drivers available", sub: "Please try again shortly" },
 };
 

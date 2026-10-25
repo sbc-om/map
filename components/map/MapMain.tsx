@@ -268,6 +268,8 @@ export function MapMain() {
   const tileLayerProps = useMemo(
     () => ({
       url: tileProvider.url,
+      fallbackUrls: tileProvider.fallbackUrls,
+      className: tileProvider.className,
       attribution: tileProvider.attribution,
       maxZoom: tileProvider.maxZoom,
       tileSize: tileProvider.tileSize,
@@ -276,6 +278,8 @@ export function MapMain() {
     }),
     [
       tileProvider.url,
+      tileProvider.fallbackUrls,
+      tileProvider.className,
       tileProvider.attribution,
       tileProvider.maxZoom,
       tileProvider.tileSize,
@@ -286,7 +290,7 @@ export function MapMain() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="relative h-screen w-full overflow-hidden">
+    <div className="relative h-dvh-screen w-full overflow-hidden">
       {/* ── Map ── */}
       <LeafletMap
         className="w-full h-full"
@@ -296,6 +300,8 @@ export function MapMain() {
       >
         <LeafletTileLayer
           url={tileLayerProps.url}
+          fallbackUrls={tileLayerProps.fallbackUrls}
+          className={tileLayerProps.className}
           attribution={tileLayerProps.attribution}
           maxZoom={tileLayerProps.maxZoom}
           tileSize={tileLayerProps.tileSize}

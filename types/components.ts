@@ -25,6 +25,10 @@ export interface LeafletMapProps {
  */
 export interface LeafletTileLayerProps {
   url: string;
+  /** Mirror URLs tried in order when `url` fails to load */
+  fallbackUrls?: string[];
+  /** CSS class for the tile container, e.g. a colour filter */
+  className?: string;
   attribution?: string;
   maxZoom?: number;
   subdomains?: string[];

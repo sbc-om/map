@@ -16,6 +16,7 @@ import type {
   Polyline,
 } from "leaflet";
 import { useLeafletMap } from "./useLeafletMap";
+import { animatePolylineDraw, glideMarker, stopGlide } from "@/lib/utils/map-motion";
 import type { LatLng } from "@/types/taxi";
 
 type LType = typeof import("leaflet");
@@ -74,9 +75,16 @@ function applyMarkerHeading(marker: Marker, heading: number) {
     : `translateZ(0) rotate(${h - 270}deg)`;
 }
 
-function pinIcon(L: LType, color: string, glyph: string) {
+/** True when a pin is new or moved, so re-renders of the same pin don't replay the drop. */
+function pinMoved(previous: Marker | null, point: LatLng) {
+  if (!previous) return true;
+  const ll = previous.getLatLng();
+  return Math.abs(ll.lat - point.lat) > 1e-6 || Math.abs(ll.lng - point.lng) > 1e-6;
+}
+
+function pinIcon(L: LType, color: string, glyph: string, animate = true) {
   return L.divIcon({
-    className: "",
+    className: animate ? "map-pin-drop" : "",
     html: `<div style="
       display:flex;align-items:center;justify-content:center;
       width:34px;height:34px;border-radius:50% 50% 50% 0;
@@ -138,7 +146,7 @@ export function useTaxiMap() {
 
   const flyTo = useCallback(
     (point: LatLng, zoom = 15) => {
-      map?.flyTo([point.lat, point.lng], zoom, { animate: true, duration: 1 });
+      map?.flyTo([point.lat, point.lng], zoom, { duration: 1.1, easeLinearity: 0.2 });
     },
     [map]
   );
@@ -158,12 +166,13 @@ export function useTaxiMap() {
     ) => {
       const L = await ensureL();
       if (!map || !L) return;
+      const animate = point ? pinMoved(pickupRef.current, point) : false;
       pickupRef.current?.remove();
       pickupRef.current = null;
       if (!point) return;
 
       const marker = L.marker([point.lat, point.lng], {
-        icon: pinIcon(L, "#22c55e", opts?.boarded ? "" : "🧍"),
+        icon: pinIcon(L, "#22c55e", opts?.boarded ? "" : "🧍", animate),
         draggable: opts?.draggable ?? false,
         zIndexOffset: 800,
       }).addTo(map);
@@ -186,12 +195,13 @@ export function useTaxiMap() {
     ) => {
       const L = await ensureL();
       if (!map || !L) return;
+      const animate = point ? pinMoved(destRef.current, point) : false;
       destRef.current?.remove();
       destRef.current = null;
       if (!point) return;
 
       const marker = L.marker([point.lat, point.lng], {
-        icon: pinIcon(L, "#ef4444", "🏁"),
+        icon: pinIcon(L, "#ef4444", "🏁", animate),
         draggable: opts?.draggable ?? false,
         zIndexOffset: 800,
       }).addTo(map);
@@ -230,8 +240,23 @@ export function useTaxiMap() {
       const group = L.layerGroup([outline, line]).addTo(map);
       routeRef.current = group;
 
+      const reveal = () => {
+        if (routeRef.current !== group) return;
+        animatePolylineDraw(map, [outline, line]);
+      };
+
       if (fit) {
-        map.fitBounds(line.getBounds(), { padding: [70, 70], animate: true });
+        // Draw the route once the camera has settled on it; a zoom mid-draw
+        // would change the path length and cut the animation short.
+        group.eachLayer((l) => (l as Polyline).setStyle({ opacity: 0 }));
+        map.flyToBounds(line.getBounds(), { padding: [70, 70], duration: 0.9 });
+        map.once("moveend", () => {
+          outline.setStyle({ opacity: 0.9 });
+          line.setStyle({ opacity: 0.95 });
+          reveal();
+        });
+      } else {
+        reveal();
       }
     },
     [ensureL, map]
@@ -249,6 +274,7 @@ export function useTaxiMap() {
       // Remove stale markers
       for (const [driverId, marker] of driversRef.current) {
         if (!next.has(driverId)) {
+          stopGlide(marker);
           marker.remove();
           driversRef.current.delete(driverId);
           driverMotionRef.current.delete(driverId);
@@ -264,7 +290,7 @@ export function useTaxiMap() {
         );
 
         if (existing) {
-          existing.setLatLng([d.location.lat, d.location.lng]);
+          glideMarker(existing, [d.location.lat, d.location.lng]);
           // Keep the icon in sync with the driver's chosen vehicle type.
           const emoji = d.emoji ?? "🚕";
           if (markerEmojiRef.current.get(d.id) !== emoji) {
@@ -303,6 +329,7 @@ export function useTaxiMap() {
       const L = await ensureL();
       if (!map || !L) return;
       if (!point) {
+        if (selfRef.current) stopGlide(selfRef.current);
         selfRef.current?.remove();
         selfRef.current = null;
         selfEmojiRef.current = null;
@@ -312,7 +339,7 @@ export function useTaxiMap() {
       const existing = selfRef.current;
       const nextHeading = movementHeading(selfMotionRef.current ?? undefined, point);
       if (existing) {
-        existing.setLatLng([point.lat, point.lng]);
+        glideMarker(existing, [point.lat, point.lng]);
         if (opts?.draggable) existing.dragging?.enable();
         else existing.dragging?.disable();
         // Keep the icon in sync with the driver's chosen vehicle type.
@@ -350,11 +377,15 @@ export function useTaxiMap() {
     pickupRef.current = null;
     destRef.current = null;
     routeRef.current = null;
+    if (selfRef.current) stopGlide(selfRef.current);
     selfRef.current?.remove();
     selfRef.current = null;
     selfMotionRef.current = null;
     selfEmojiRef.current = null;
-    driversRef.current.forEach((m) => m.remove());
+    driversRef.current.forEach((m) => {
+      stopGlide(m);
+      m.remove();
+    });
     driversRef.current.clear();
     driverMotionRef.current.clear();
     markerEmojiRef.current.clear();

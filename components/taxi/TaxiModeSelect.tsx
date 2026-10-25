@@ -13,14 +13,14 @@ interface TaxiModeSelectProps {
  */
 export function TaxiModeSelect({ onSelect }: TaxiModeSelectProps) {
   return (
-    <div className="absolute inset-0 z-[1000] flex items-center justify-center bg-black/70 p-6 backdrop-blur-sm">
-      <div className="w-full max-w-md">
+    <div className="absolute inset-0 z-[1000] flex items-center justify-center bg-black/70 p-6 backdrop-blur-sm animate-in fade-in-0 duration-500">
+      <div className="w-full max-w-md animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-4 duration-700 ease-out">
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500 text-2xl shadow-lg shadow-amber-500/30">
             🚕
           </div>
           <h1 className="text-3xl font-black tracking-tight text-white">
-            OmanTaxi
+            Taxi
           </h1>
           <p className="mt-2 text-sm text-white/45">
             Choose how you want to continue
@@ -31,9 +31,9 @@ export function TaxiModeSelect({ onSelect }: TaxiModeSelectProps) {
           <button
             type="button"
             onClick={() => onSelect("passenger")}
-            className="group flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-6 text-center transition-all hover:-translate-y-1 hover:border-amber-400/50 hover:bg-white/10"
+            className="group flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-6 text-center transition-all duration-300 ease-out hover:-translate-y-1 hover:border-amber-400/50 hover:bg-white/10 hover:shadow-xl hover:shadow-amber-500/10 active:translate-y-0 active:scale-[0.98]"
           >
-            <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-amber-500/15 text-amber-400 transition group-hover:bg-amber-500 group-hover:text-black">
+            <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-amber-500/15 text-amber-400 transition duration-300 group-hover:scale-110 group-hover:bg-amber-500 group-hover:text-black">
               <User className="h-6 w-6" />
             </span>
             <span className="text-lg font-bold text-white">Passenger</span>
@@ -45,9 +45,9 @@ export function TaxiModeSelect({ onSelect }: TaxiModeSelectProps) {
           <button
             type="button"
             onClick={() => onSelect("driver")}
-            className="group flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-6 text-center transition-all hover:-translate-y-1 hover:border-amber-400/50 hover:bg-white/10"
+            className="group flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-6 text-center transition-all duration-300 ease-out hover:-translate-y-1 hover:border-amber-400/50 hover:bg-white/10 hover:shadow-xl hover:shadow-amber-500/10 active:translate-y-0 active:scale-[0.98]"
           >
-            <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-amber-500/15 text-amber-400 transition group-hover:bg-amber-500 group-hover:text-black">
+            <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-amber-500/15 text-amber-400 transition duration-300 group-hover:scale-110 group-hover:bg-amber-500 group-hover:text-black">
               <Car className="h-6 w-6" />
             </span>
             <span className="text-lg font-bold text-white">Driver</span>

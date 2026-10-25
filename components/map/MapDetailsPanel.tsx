@@ -21,6 +21,24 @@ interface CountryInfo {
   };
 }
 
+// REST Countries v3.1 is retired; this is the same open dataset (mledoze/countries)
+// served from a CDN, pinned and fetched once per session.
+const COUNTRY_DATASET_URL =
+  "https://cdn.jsdelivr.net/npm/world-countries@5.1.0/countries.json";
+
+let countryDataset: Promise<Array<CountryInfo & { cca2: string }>> | null = null;
+
+function loadCountryDataset() {
+  countryDataset ??= fetch(COUNTRY_DATASET_URL).then((res) => {
+    if (!res.ok) throw new Error(`Country data request failed: ${res.status}`);
+    return res.json();
+  });
+  countryDataset.catch(() => {
+    countryDataset = null; // allow a retry on the next selection
+  });
+  return countryDataset;
+}
+
 interface MapDetailsPanelProps {
   country: GeoJSON.Feature | null;
   onClose: () => void;
@@ -52,11 +70,13 @@ export function MapDetailsPanel({ country, onClose }: MapDetailsPanelProps) {
 
     const fetchCountryInfo = async () => {
       try {
-        const response = await fetch(
-          `https://restcountries.com/v3.1/alpha/${isoCode}`
+        const countries = await loadCountryDataset();
+        const match = countries.find((c) => c.cca2 === isoCode);
+        setCountryInfo(
+          match
+            ? { ...match, flags: { svg: `https://flagcdn.com/${isoCode.toLowerCase()}.svg` } }
+            : null
         );
-        const data = await response.json();
-        setCountryInfo(data[0]);
       } catch (error) {
         console.error("Error fetching country info:", error);
       }

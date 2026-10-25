@@ -102,6 +102,8 @@ export function TaxiMain() {
       >
         <LeafletTileLayer
           url={tileProvider.url}
+          fallbackUrls={tileProvider.fallbackUrls}
+          className={tileProvider.className}
           attribution={tileProvider.attribution}
           maxZoom={tileProvider.maxZoom}
           tileSize={tileProvider.tileSize}

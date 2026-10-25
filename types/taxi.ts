@@ -1,5 +1,5 @@
 /**
- * Taxi dispatch module type definitions (OmanTaxi)
+ * Taxi dispatch module type definitions (Taxi)
  */
 
 /** Simple latitude/longitude pair */

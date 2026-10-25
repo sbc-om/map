@@ -29,6 +29,7 @@ import { useGeolocation } from "@/hooks/useGeolocation";
 import { useLeafletMap } from "@/hooks/useLeafletMap";
 import { MapUser } from "./MapUser";
 import { searchCountries, type Country } from "@/lib/countries";
+import { nominatimSearch } from "@/lib/geo-services";
 
 // ─── Category quick-access chips ─────────────────────────────────────────────
 
@@ -118,14 +119,13 @@ function typeIcon(t: GeoResult["type"]): React.ReactNode {
 
 async function searchNominatim(query: string): Promise<NominatimResult[]> {
   if (!query.trim()) return [];
-  const url =
-    `https://nominatim.openstreetmap.org/search?` +
-    `q=${encodeURIComponent(query)}&format=json&limit=6&addressdetails=1&accept-language=en`;
-  const res = await fetch(url, {
-    headers: { "User-Agent": "SBCMap/1.0 (https://map.sbc.om)" },
-  });
-  if (!res.ok) return [];
-  return res.json();
+  try {
+    return await nominatimSearch<NominatimResult[]>(
+      `q=${encodeURIComponent(query)}&format=json&limit=6&addressdetails=1&accept-language=en`
+    );
+  } catch {
+    return [];
+  }
 }
 
 /** Parse "lat, lng" coordinate strings */

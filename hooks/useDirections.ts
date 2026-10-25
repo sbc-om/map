@@ -2,6 +2,8 @@
 
 import { useState, useCallback, useRef } from "react";
 import { useLeafletMap } from "./useLeafletMap";
+import { nominatimSearch, osrmDrivingRoute } from "@/lib/geo-services";
+import { animatePolylineDraw } from "@/lib/utils/map-motion";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -31,14 +33,9 @@ export interface DirectionResult {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 async function geocodeQuery(query: string): Promise<GeocodedPlace> {
-  const url =
-    `https://nominatim.openstreetmap.org/search?` +
-    `q=${encodeURIComponent(query)}&format=json&limit=1&accept-language=en`;
-
-  const res = await fetch(url, {
-    headers: { "User-Agent": "SBCMap/1.0 (https://map.sbc.om)" },
-  });
-  const data = await res.json();
+  const data = await nominatimSearch<
+    Array<{ name?: string; display_name: string; lat: string; lon: string }>
+  >(`q=${encodeURIComponent(query)}&format=json&limit=1&accept-language=en`);
 
   if (!data?.length) throw new Error(`Could not find "${query}"`);
 
@@ -90,16 +87,19 @@ export function useDirections() {
           geocodeQuery(toQuery),
         ]);
 
-        // 2. Fetch route via OSRM public API
-        const routeUrl =
-          `https://router.project-osrm.org/route/v1/driving/` +
+        // 2. Fetch route via OSRM public API (with a backup server)
+        const data = await osrmDrivingRoute<{
+          code: string;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          routes?: any[];
+        }>(
           `${from.lng},${from.lat};${to.lng},${to.lat}` +
-          `?geometries=geojson&overview=full&steps=true`;
+            `?geometries=geojson&overview=full&steps=true`
+        ).catch(() => {
+          throw new Error("No route found between these locations.");
+        });
 
-        const res = await fetch(routeUrl);
-        const data = await res.json();
-
-        if (data.code !== "Ok" || !data.routes?.length) {
+        if (!data.routes?.length) {
           throw new Error("No route found between these locations.");
         }
 
@@ -157,8 +157,16 @@ export function useDirections() {
         group.addTo(map);
         layerRef.current = group;
 
-        // 5. Fit map to route
-        map.fitBounds(line.getBounds(), { padding: [60, 60], animate: true });
+        // 5. Fly to the route, then draw it in once the camera settles
+        outline.setStyle({ opacity: 0 });
+        line.setStyle({ opacity: 0 });
+        map.flyToBounds(line.getBounds(), { padding: [60, 60], duration: 0.9 });
+        map.once("moveend", () => {
+          if (layerRef.current !== group) return;
+          outline.setStyle({ opacity: 0.9 });
+          line.setStyle({ opacity: 0.95 });
+          animatePolylineDraw(map, [outline, line]);
+        });
 
         // 6. Parse steps
         const steps: DirectionStep[] = route.legs[0].steps.map(
