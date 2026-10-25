@@ -67,10 +67,14 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
 
   const ride = useRide(activeRideId);
 
-  // Tick a 1s clock only while the taxi is approaching, to drive the ETA.
+  // Tick every second while the taxi is approaching (to drive the ETA), and
+  // every 5s otherwise so stale drivers drop off the map on time instead of
+  // only when the driver registry happens to change.
   useEffect(() => {
-    if (ride?.status !== "ACCEPTED") return;
-    const t = setInterval(() => setNow(Date.now()), 1000);
+    const t = setInterval(
+      () => setNow(Date.now()),
+      ride?.status === "ACCEPTED" ? 1000 : 5000
+    );
     return () => clearInterval(t);
   }, [ride?.status]);
 
@@ -241,20 +245,19 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
   // ── Nearby drivers (live) ──────────────────────────────────────────────────
   const nearbyDrivers = useMemo(() => {
     if (!pickup) return [];
-    return findNearbyDrivers({ pickup }, Object.values(drivers));
-  }, [pickup, drivers]);
+    return findNearbyDrivers({ pickup }, Object.values(drivers), undefined, now);
+  }, [pickup, drivers, now]);
 
   // ── All online taxis (live) — always visible on the map, even before a
   //    pickup is chosen, so the passenger can see cars moving around. ─────────
   const onlineDrivers = useMemo(() => {
-    const now = Date.now();
     return Object.values(drivers).filter(
       (d) =>
         d.status === "ONLINE" &&
         d.location !== null &&
         now - d.lastSeen <= DRIVER_STALE_MS
     );
-  }, [drivers]);
+  }, [drivers, now]);
 
   // ── Assigned driver (once a taxi accepts the ride) ─────────────────────────
   const assignedDriver = ride?.driverId ? drivers[ride.driverId] : undefined;
@@ -274,7 +277,7 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
         {
           id: assignedDriver.id,
           location: assignedDriver.location,
-          emoji: VEHICLE_TYPES[assignedDriver.vehicleType].emoji,
+          vehicle: assignedDriver.vehicleType,
         },
       ]);
       return;
@@ -283,7 +286,7 @@ export function PassengerFlow({ onExit, registerMapClick, onPickModeChange }: Pa
       onlineDrivers.map((d) => ({
         id: d.id,
         location: d.location!,
-        emoji: VEHICLE_TYPES[d.vehicleType].emoji,
+        vehicle: d.vehicleType,
       }))
     );
   }, [hasAssignedTaxi, assignedDriver, onlineDrivers, taxiMap]);

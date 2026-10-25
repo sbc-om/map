@@ -17,14 +17,25 @@ import type {
 } from "leaflet";
 import { useLeafletMap } from "./useLeafletMap";
 import { animatePolylineDraw, glideMarker, stopGlide } from "@/lib/utils/map-motion";
-import type { LatLng } from "@/types/taxi";
+import type { LatLng, VehicleType } from "@/types/taxi";
 
 type LType = typeof import("leaflet");
 
 type MarkerMotion = {
   location: LatLng;
+  /** Geographic bearing of travel (north = 0, clockwise) */
   heading: number;
+  /** Accumulated CSS rotation, so turns always take the short way round */
+  rotation: number;
+  /** When the location last changed, to pace the glide to the update rate */
+  movedAt: number;
 };
+
+type CarOptions = { vehicle: VehicleType; self?: boolean; offline?: boolean };
+
+/** Glide pacing bounds: match the update interval so motion is continuous. */
+const MIN_GLIDE_MS = 300;
+const MAX_GLIDE_MS = 5200;
 
 function calculateBearing(from: LatLng, to: LatLng) {
   const lat1 = (from.lat * Math.PI) / 180;
@@ -39,40 +50,108 @@ function calculateBearing(from: LatLng, to: LatLng) {
   return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
 }
 
-function movementHeading(previous: MarkerMotion | undefined, next: LatLng) {
-  if (!previous) return 90;
-
-  const latDelta = Math.abs(next.lat - previous.location.lat);
-  const lngDelta = Math.abs(next.lng - previous.location.lng);
-
-  // Ignore GPS noise / tiny simulation jitter to keep the taxi stable.
-  if (latDelta < 0.00001 && lngDelta < 0.00001) {
-    return previous.heading;
-  }
-
-  return calculateBearing(previous.location, next);
+function hasMoved(previous: MarkerMotion | undefined, next: LatLng) {
+  if (!previous) return false;
+  // Ignore GPS noise / tiny simulation jitter to keep the car stable.
+  return (
+    Math.abs(next.lat - previous.location.lat) >= 0.00001 ||
+    Math.abs(next.lng - previous.location.lng) >= 0.00001
+  );
 }
 
-function applyMarkerHeading(marker: Marker, heading: number) {
-  const element = marker.getElement();
-  if (!element) return;
+/** Next motion state for a car moving to `next`. */
+function nextMotion(previous: MarkerMotion | undefined, next: LatLng): MarkerMotion {
+  const now = Date.now();
+  if (!previous) return { location: next, heading: 0, rotation: 0, movedAt: now };
+  if (!hasMoved(previous, next)) return previous;
 
-  const body = element.querySelector<HTMLElement>(".taxi-car-marker__body");
-  if (!body) return;
+  const heading = calculateBearing(previous.location, next);
+  const delta = ((heading - previous.heading + 540) % 360) - 180;
+  return {
+    location: next,
+    heading,
+    rotation: previous.rotation + delta,
+    movedAt: now,
+  };
+}
 
-  // The 🚕 emoji is a side view whose front points LEFT (west) by default, and
-  // `heading` is a geographic bearing (north=0, east=90, clockwise). To keep the
-  // car upright (never upside down) while its FRONT points toward the travel
-  // direction:
-  //   • heading east  (0–180°) → mirror horizontally so it faces right, then tilt
-  //   • heading west (180–360°) → keep it facing left, then tilt
-  // The horizontal flip happens at due north/south, where the car is vertical
-  // and the flip is least noticeable.
-  const h = ((heading % 360) + 360) % 360;
-  const headingEast = h > 0 && h < 180;
-  body.style.transform = headingEast
-    ? `translateZ(0) scaleX(-1) rotate(${90 - h}deg)`
-    : `translateZ(0) rotate(${h - 270}deg)`;
+function glideDuration(previous: MarkerMotion | undefined) {
+  if (!previous) return MIN_GLIDE_MS;
+  return Math.min(MAX_GLIDE_MS, Math.max(MIN_GLIDE_MS, Date.now() - previous.movedAt));
+}
+
+function applyMarkerRotation(marker: Marker, rotation: number) {
+  const body = marker
+    .getElement()
+    ?.querySelector<HTMLElement>(".taxi-car-marker__body");
+  // The car is drawn top-down facing north, so the bearing is the rotation.
+  if (body) body.style.transform = `rotate(${rotation}deg)`;
+}
+
+const VEHICLE_STYLE: Record<
+  VehicleType,
+  { body: string; roof: string; width: number; length: number }
+> = {
+  taxi: { body: "#facc15", roof: "#eab308", width: 22, length: 40 },
+  economy: { body: "#f8fafc", roof: "#cbd5e1", width: 22, length: 40 },
+  comfort: { body: "#1e293b", roof: "#334155", width: 23, length: 42 },
+  xl: { body: "#e2e8f0", roof: "#94a3b8", width: 24, length: 47 },
+  bike: { body: "#f97316", roof: "#1f2937", width: 12, length: 30 },
+};
+
+/** Top-down vehicle drawing, nose pointing up (north). */
+function vehicleSvg(vehicle: VehicleType) {
+  const { body, roof, width: w, length: l } = VEHICLE_STYLE[vehicle];
+  const outline = 'stroke="rgba(15,23,42,0.55)" stroke-width="1"';
+
+  if (vehicle === "bike") {
+    return `<svg width="${w}" height="${l}" viewBox="0 0 ${w} ${l}" aria-hidden="true">
+      <rect x="4" y="0.5" width="4" height="7" rx="2" fill="#111827"/>
+      <rect x="4" y="${l - 7.5}" width="4" height="7" rx="2" fill="#111827"/>
+      <rect x="1.5" y="5" width="${w - 3}" height="${l - 10}" rx="${(w - 3) / 2}" fill="${body}" ${outline}/>
+      <circle cx="${w / 2}" cy="${l * 0.55}" r="4.2" fill="${roof}" stroke="#fff" stroke-width="1"/>
+      <rect x="0" y="${l * 0.3}" width="${w}" height="1.8" rx="0.9" fill="#111827"/>
+    </svg>`;
+  }
+
+  const sign =
+    vehicle === "taxi"
+      ? `<rect x="${w * 0.3}" y="${l * 0.5}" width="${w * 0.4}" height="${l * 0.09}" rx="1" fill="#111827"/>
+         <rect x="${w * 0.36}" y="${l * 0.52}" width="${w * 0.28}" height="${l * 0.05}" rx="0.5" fill="#fde047"/>`
+      : "";
+
+  return `<svg width="${w}" height="${l}" viewBox="0 0 ${w} ${l}" aria-hidden="true">
+    <rect x="0.5" y="0.5" width="${w - 1}" height="${l - 1}" rx="${w * 0.36}" fill="${body}" ${outline}/>
+    <rect x="${w * 0.14}" y="${l * 0.21}" width="${w * 0.72}" height="${l * 0.16}" rx="2.5" fill="#0f172a" opacity="0.82"/>
+    <rect x="${w * 0.2}" y="${l * 0.39}" width="${w * 0.6}" height="${l * 0.33}" rx="3" fill="${roof}"/>
+    <rect x="${w * 0.17}" y="${l * 0.74}" width="${w * 0.66}" height="${l * 0.1}" rx="2" fill="#0f172a" opacity="0.72"/>
+    <rect x="${w * 0.12}" y="1.6" width="${w * 0.24}" height="2.4" rx="1.2" fill="#fef9c3"/>
+    <rect x="${w * 0.64}" y="1.6" width="${w * 0.24}" height="2.4" rx="1.2" fill="#fef9c3"/>
+    <rect x="${w * 0.12}" y="${l - 3.8}" width="${w * 0.24}" height="2.2" rx="1.1" fill="#ef4444"/>
+    <rect x="${w * 0.64}" y="${l - 3.8}" width="${w * 0.24}" height="2.2" rx="1.1" fill="#ef4444"/>
+    ${sign}
+  </svg>`;
+}
+
+function carIcon(L: LType, { vehicle, self, offline }: CarOptions) {
+  const classes = [
+    "taxi-car-marker",
+    self ? "taxi-car-marker--self" : "",
+    offline ? "taxi-car-marker--offline" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return L.divIcon({
+    className: classes,
+    html: `<div class="taxi-car-marker__halo"></div>
+      <div class="taxi-car-marker__body">${vehicleSvg(vehicle)}</div>`,
+    iconSize: [56, 56],
+    iconAnchor: [28, 28],
+  });
+}
+
+function carKey({ vehicle, self, offline }: CarOptions) {
+  return `${vehicle}:${self ? 1 : 0}:${offline ? 1 : 0}`;
 }
 
 /** True when a pin is new or moved, so re-renders of the same pin don't replay the drop. */
@@ -98,31 +177,6 @@ function pinIcon(L: LType, color: string, glyph: string, animate = true) {
   });
 }
 
-function carIcon(L: LType, emoji = "🚕") {
-  return L.divIcon({
-    className: "taxi-car-marker",
-    html: `<div class="taxi-car-marker__body" style="
-      width:46px;
-      height:46px;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      transform:translateZ(0) rotate(0deg);
-      transform-origin:50% 50%;
-      filter:drop-shadow(0 6px 12px rgba(15,23,42,0.32));
-    ">
-      <span style="
-        font-size:34px;
-        line-height:1;
-        transform:translateY(1px);
-        text-shadow:0 1px 0 rgba(255,255,255,0.4);
-      ">${emoji}</span>
-    </div>`,
-    iconSize: [46, 46],
-    iconAnchor: [23, 23],
-  });
-}
-
 export function useTaxiMap() {
   const map = useLeafletMap();
   const lRef = useRef<LType | null>(null);
@@ -132,10 +186,11 @@ export function useTaxiMap() {
   const routeRef = useRef<LayerGroup | null>(null);
   const driversRef = useRef<Map<string, Marker>>(new Map());
   const driverMotionRef = useRef<Map<string, MarkerMotion>>(new Map());
-  const markerEmojiRef = useRef<Map<string, string>>(new Map());
+  const markerKeyRef = useRef<Map<string, string>>(new Map());
   const selfRef = useRef<Marker | null>(null);
   const selfMotionRef = useRef<MarkerMotion | null>(null);
-  const selfEmojiRef = useRef<string | null>(null);
+  const selfKeyRef = useRef<string | null>(null);
+  const selfDragEndRef = useRef<(() => void) | null>(null);
 
   const ensureL = useCallback(async (): Promise<LType | null> => {
     if (lRef.current) return lRef.current;
@@ -262,10 +317,10 @@ export function useTaxiMap() {
     [ensureL, map]
   );
 
-  /** Render/update a set of driver pins keyed by driver id. */
+  /** Render/update a set of driver cars keyed by driver id. */
   const setDrivers = useCallback(
     async (
-      drivers: Array<{ id: string; location: LatLng; emoji?: string }>
+      drivers: Array<{ id: string; location: LatLng; vehicle?: VehicleType }>
     ) => {
       const L = await ensureL();
       if (!map || !L) return;
@@ -278,53 +333,62 @@ export function useTaxiMap() {
           marker.remove();
           driversRef.current.delete(driverId);
           driverMotionRef.current.delete(driverId);
-          markerEmojiRef.current.delete(driverId);
+          markerKeyRef.current.delete(driverId);
         }
       }
       // Add or move current markers
       for (const d of drivers) {
+        const car: CarOptions = { vehicle: d.vehicle ?? "taxi" };
+        const key = carKey(car);
+        const previous = driverMotionRef.current.get(d.id);
+        const motion = nextMotion(previous, d.location);
         const existing = driversRef.current.get(d.id);
-        const nextHeading = movementHeading(
-          driverMotionRef.current.get(d.id),
-          d.location
-        );
 
         if (existing) {
-          glideMarker(existing, [d.location.lat, d.location.lng]);
-          // Keep the icon in sync with the driver's chosen vehicle type.
-          const emoji = d.emoji ?? "🚕";
-          if (markerEmojiRef.current.get(d.id) !== emoji) {
-            existing.setIcon(carIcon(L, emoji));
-            markerEmojiRef.current.set(d.id, emoji);
+          if (motion !== previous) {
+            glideMarker(existing, [d.location.lat, d.location.lng], {
+              durationMs: glideDuration(previous),
+              easing: "linear",
+            });
           }
-          applyMarkerHeading(existing, nextHeading);
+          // Keep the icon in sync with the driver's chosen vehicle type.
+          if (markerKeyRef.current.get(d.id) !== key) {
+            existing.setIcon(carIcon(L, car));
+            markerKeyRef.current.set(d.id, key);
+          }
+          applyMarkerRotation(existing, motion.rotation);
         } else {
           const marker = L.marker([d.location.lat, d.location.lng], {
-            icon: carIcon(L, d.emoji),
+            icon: carIcon(L, car),
             zIndexOffset: 600,
+            keyboard: false,
           }).addTo(map);
-          markerEmojiRef.current.set(d.id, d.emoji ?? "🚕");
-          applyMarkerHeading(marker, nextHeading);
+          markerKeyRef.current.set(d.id, key);
+          applyMarkerRotation(marker, motion.rotation);
           driversRef.current.set(d.id, marker);
         }
 
-        driverMotionRef.current.set(d.id, {
-          location: d.location,
-          heading: nextHeading,
-        });
+        driverMotionRef.current.set(d.id, motion);
       }
     },
     [ensureL, map]
   );
 
   /**
-   * The driver's own car marker. Optionally draggable so the driver can set or
-   * fine-tune their position by hand; updates in place to keep movement smooth.
+   * The driver's own car. Optionally draggable so the driver can set or
+   * fine-tune their position by hand; updates in place to keep movement
+   * smooth. With `follow`, the camera pans to keep the car in view.
    */
   const setSelfDriver = useCallback(
     async (
       point: LatLng | null,
-      opts?: { draggable?: boolean; onDragEnd?: (p: LatLng) => void; emoji?: string }
+      opts?: {
+        draggable?: boolean;
+        onDragEnd?: (p: LatLng) => void;
+        vehicle?: VehicleType;
+        offline?: boolean;
+        follow?: boolean;
+      }
     ) => {
       const L = await ensureL();
       if (!map || !L) return;
@@ -332,40 +396,67 @@ export function useTaxiMap() {
         if (selfRef.current) stopGlide(selfRef.current);
         selfRef.current?.remove();
         selfRef.current = null;
-        selfEmojiRef.current = null;
+        selfMotionRef.current = null;
+        selfKeyRef.current = null;
         return;
       }
-      const emoji = opts?.emoji ?? "🚕";
-      const existing = selfRef.current;
-      const nextHeading = movementHeading(selfMotionRef.current ?? undefined, point);
-      if (existing) {
-        glideMarker(existing, [point.lat, point.lng]);
-        if (opts?.draggable) existing.dragging?.enable();
-        else existing.dragging?.disable();
-        // Keep the icon in sync with the driver's chosen vehicle type.
-        if (selfEmojiRef.current !== emoji) {
-          existing.setIcon(carIcon(L, emoji));
-          selfEmojiRef.current = emoji;
+
+      const car: CarOptions = {
+        vehicle: opts?.vehicle ?? "taxi",
+        self: true,
+        offline: opts?.offline,
+      };
+      const key = carKey(car);
+      const previous = selfMotionRef.current ?? undefined;
+      const motion = nextMotion(previous, point);
+
+      let marker = selfRef.current;
+      if (marker) {
+        if (motion !== previous) {
+          glideMarker(marker, [point.lat, point.lng], {
+            durationMs: glideDuration(previous),
+            easing: "linear",
+          });
         }
-        applyMarkerHeading(existing, nextHeading);
-        selfMotionRef.current = { location: point, heading: nextHeading };
-        return;
+        if (selfKeyRef.current !== key) {
+          marker.setIcon(carIcon(L, car));
+          selfKeyRef.current = key;
+        }
+        if (opts?.draggable) marker.dragging?.enable();
+        else marker.dragging?.disable();
+      } else {
+        marker = L.marker([point.lat, point.lng], {
+          icon: carIcon(L, car),
+          draggable: opts?.draggable ?? false,
+          zIndexOffset: 1000,
+          keyboard: false,
+        }).addTo(map);
+        selfRef.current = marker;
+        selfKeyRef.current = key;
       }
-      const marker = L.marker([point.lat, point.lng], {
-        icon: carIcon(L, emoji),
-        draggable: opts?.draggable ?? false,
-        zIndexOffset: 1000,
-      }).addTo(map);
-      selfEmojiRef.current = emoji;
-      applyMarkerHeading(marker, nextHeading);
-      if (opts?.draggable && opts.onDragEnd) {
-        marker.on("dragend", () => {
-          const ll = marker.getLatLng();
-          opts.onDragEnd?.({ lat: ll.lat, lng: ll.lng });
-        });
+      applyMarkerRotation(marker, motion.rotation);
+      selfMotionRef.current = motion;
+
+      // Rebind so the latest callback is used, not the one from creation time.
+      if (selfDragEndRef.current) marker.off("dragend", selfDragEndRef.current);
+      selfDragEndRef.current = null;
+      if (opts?.onDragEnd) {
+        const target = marker;
+        const onDragEnd = opts.onDragEnd;
+        const handler = () => {
+          const ll = target.getLatLng();
+          onDragEnd({ lat: ll.lat, lng: ll.lng });
+        };
+        marker.on("dragend", handler);
+        selfDragEndRef.current = handler;
       }
-      selfRef.current = marker;
-      selfMotionRef.current = { location: point, heading: nextHeading };
+
+      if (opts?.follow) {
+        const comfortZone = map.getBounds().pad(-0.3);
+        if (!comfortZone.contains([point.lat, point.lng])) {
+          map.panTo([point.lat, point.lng], { animate: true, duration: 0.8, easeLinearity: 0.25 });
+        }
+      }
     },
     [ensureL, map]
   );
@@ -381,14 +472,15 @@ export function useTaxiMap() {
     selfRef.current?.remove();
     selfRef.current = null;
     selfMotionRef.current = null;
-    selfEmojiRef.current = null;
+    selfKeyRef.current = null;
+    selfDragEndRef.current = null;
     driversRef.current.forEach((m) => {
       stopGlide(m);
       m.remove();
     });
     driversRef.current.clear();
     driverMotionRef.current.clear();
-    markerEmojiRef.current.clear();
+    markerKeyRef.current.clear();
   }, []);
 
   // Clean up all layers on unmount.

@@ -110,15 +110,24 @@ export function upsertDriver(driver: DriverSession): void {
   publishDriver(driver);
 }
 
+/**
+ * Update a driver record. Every patch stamps `lastSeen`: remote devices apply
+ * driver updates last-write-wins by `lastSeen`, so an unstamped patch (e.g.
+ * accepting a ride) would be ignored everywhere else.
+ */
 export function patchDriver(
   driverId: string,
   patch: Partial<DriverSession>
 ): DriverSession | null {
   let next: DriverSession | null = null;
   update<DriverMap>(TAXI_KEYS.drivers, {}, (prev) => {
-    const existing = prev[driverId];
+    // Fall back to this device's own session when the shared registry lost the
+    // record (cleared storage, a remote "remove"), so the driver can still act.
+    const session = read<DriverSession | null>(TAXI_KEYS.driverSession, null);
+    const existing =
+      prev[driverId] ?? (session?.id === driverId ? session : undefined);
     if (!existing) return prev;
-    next = { ...existing, ...patch };
+    next = { ...existing, lastSeen: Date.now(), ...patch };
     return { ...prev, [driverId]: next };
   });
   if (next) {
@@ -142,6 +151,11 @@ export function setDriverStatus(
 
 export function updateDriverLocation(driverId: string, location: LatLng): void {
   patchDriver(driverId, { location, lastSeen: Date.now() });
+}
+
+/** Heartbeat without a new position, so passengers keep seeing the driver. */
+export function touchDriver(driverId: string): void {
+  patchDriver(driverId, {});
 }
 
 export function removeDriver(driverId: string): void {

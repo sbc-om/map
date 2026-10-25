@@ -11,7 +11,9 @@ import type { Map as LeafletMap, Marker, Polyline } from "leaflet";
 /** Moves farther than this (degrees, ~3 km) jump instead of gliding across the map. */
 const MAX_GLIDE_DEGREES = 0.03;
 
-const activeGlides = new WeakMap<Marker, number>();
+type Glide = { frame: number; to: [number, number] };
+
+const activeGlides = new WeakMap<Marker, Glide>();
 
 export function prefersReducedMotion(): boolean {
   return (
@@ -27,11 +29,19 @@ function easeInOutSine(t: number) {
 /**
  * Smoothly move a marker to `to`. A new call cancels the glide in progress
  * and continues from wherever the marker currently is, so frequent GPS
- * updates blend into one continuous motion.
+ * updates blend into one continuous motion. Use `linear` easing for live
+ * tracking (constant speed between updates) and the default ease for
+ * one-off moves.
  */
-export function glideMarker(marker: Marker, to: [number, number], durationMs = 900) {
+export function glideMarker(
+  marker: Marker,
+  to: [number, number],
+  { durationMs = 900, easing = "ease" }: { durationMs?: number; easing?: "ease" | "linear" } = {}
+) {
   const pending = activeGlides.get(marker);
-  if (pending !== undefined) cancelAnimationFrame(pending);
+  // Already heading there: restarting would only slow the car down
+  if (pending && pending.to[0] === to[0] && pending.to[1] === to[1]) return;
+  if (pending) cancelAnimationFrame(pending.frame);
 
   const from = marker.getLatLng();
   const dLat = to[0] - from.lat;
@@ -46,24 +56,25 @@ export function glideMarker(marker: Marker, to: [number, number], durationMs = 9
     return;
   }
 
+  const ease = easing === "linear" ? (t: number) => t : easeInOutSine;
   const start = performance.now();
   const step = (now: number) => {
     const t = Math.min(1, (now - start) / durationMs);
-    const k = easeInOutSine(t);
+    const k = ease(t);
     marker.setLatLng([from.lat + dLat * k, from.lng + dLng * k]);
     if (t < 1) {
-      activeGlides.set(marker, requestAnimationFrame(step));
+      activeGlides.set(marker, { frame: requestAnimationFrame(step), to });
     } else {
       activeGlides.delete(marker);
     }
   };
-  activeGlides.set(marker, requestAnimationFrame(step));
+  activeGlides.set(marker, { frame: requestAnimationFrame(step), to });
 }
 
 /** Stop any glide in progress (call before removing a marker). */
 export function stopGlide(marker: Marker) {
   const pending = activeGlides.get(marker);
-  if (pending !== undefined) cancelAnimationFrame(pending);
+  if (pending) cancelAnimationFrame(pending.frame);
   activeGlides.delete(marker);
 }
 

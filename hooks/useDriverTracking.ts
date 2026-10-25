@@ -1,58 +1,89 @@
 "use client";
 
 /**
- * Tracks an online driver's GPS position and broadcasts it to the store on a
- * fixed interval (every {@link DRIVER_GPS_INTERVAL_MS} ms), simulating the
- * continuous location updates a real driver app would emit.
+ * Keeps an online driver visible to passengers. Every
+ * {@link DRIVER_GPS_INTERVAL_MS} ms it publishes a heartbeat: the latest GPS
+ * fix when GPS positioning is in use, otherwise just a fresh `lastSeen` so a
+ * driver positioned by hand on the map doesn't go stale for passengers.
  */
 
 import { useEffect, useRef } from "react";
 import { DRIVER_GPS_INTERVAL_MS } from "@/constants/taxi-config";
-import { updateDriverLocation } from "@/lib/taxi/actions";
+import { touchDriver, updateDriverLocation } from "@/lib/taxi/actions";
+import type { LatLng } from "@/types/taxi";
+
+/** Hard cap on a one-off GPS request, including an unanswered permission prompt. */
+const POSITION_TIMEOUT_MS = 12_000;
+
+/**
+ * One GPS fix as a promise. Unlike the `timeout` option of
+ * `getCurrentPosition`, this also rejects when the user never answers the
+ * permission prompt, so callers can't hang waiting.
+ */
+export function getCurrentPositionOnce(): Promise<LatLng> {
+  return new Promise((resolve, reject) => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      reject(new Error("Geolocation is not supported"));
+      return;
+    }
+    const timer = setTimeout(
+      () => reject(new Error("Timed out waiting for location")),
+      POSITION_TIMEOUT_MS
+    );
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        clearTimeout(timer);
+        resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 15_000 }
+    );
+  });
+}
 
 export function useDriverTracking(
   driverId: string | null,
-  enabled: boolean
+  enabled: boolean,
+  useGps: boolean
 ): void {
-  const watchIdRef = useRef<number | null>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const lastFixRef = useRef<{ lat: number; lng: number } | null>(null);
+  const lastFixRef = useRef<LatLng | null>(null);
 
   useEffect(() => {
-    if (!enabled || !driverId || typeof navigator === "undefined") {
-      return;
+    if (!enabled || !driverId) return;
+
+    let watchId: number | null = null;
+    lastFixRef.current = null;
+
+    if (useGps && typeof navigator !== "undefined" && navigator.geolocation) {
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const isFirstFix = lastFixRef.current === null;
+          lastFixRef.current = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+          };
+          // Show the first fix right away instead of waiting for the heartbeat
+          if (isFirstFix) updateDriverLocation(driverId, lastFixRef.current);
+        },
+        () => {
+          /* ignore transient errors; heartbeat keeps last known fix */
+        },
+        { enableHighAccuracy: true, maximumAge: 5_000, timeout: 10_000 }
+      );
     }
-    if (!("geolocation" in navigator)) return;
 
-    // Continuously watch the device position; cache the latest fix.
-    watchIdRef.current = navigator.geolocation.watchPosition(
-      (pos) => {
-        lastFixRef.current = {
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-        };
-      },
-      () => {
-        /* ignore transient errors; heartbeat keeps last known fix */
-      },
-      { enableHighAccuracy: true, maximumAge: 5_000, timeout: 10_000 }
-    );
-
-    // Heartbeat: push the latest fix to the shared store every N seconds.
-    intervalRef.current = setInterval(() => {
+    const heartbeat = setInterval(() => {
       const fix = lastFixRef.current;
-      if (fix) updateDriverLocation(driverId, fix);
+      if (useGps && fix) updateDriverLocation(driverId, fix);
+      else touchDriver(driverId);
     }, DRIVER_GPS_INTERVAL_MS);
 
     return () => {
-      if (watchIdRef.current !== null) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
-        watchIdRef.current = null;
-      }
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+      clearInterval(heartbeat);
     };
-  }, [driverId, enabled]);
+  }, [driverId, enabled, useGps]);
 }
