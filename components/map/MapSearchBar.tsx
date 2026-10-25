@@ -270,14 +270,24 @@ export function MapSearchBar({
           icon: <Globe2 className="h-4 w-4 text-blue-500" />,
         }));
 
-        // Merge: Nominatim first, then any unique country results
+        // Merge: Nominatim first, then any unique country results. A Nominatim
+        // country that matches a local boundary keeps its countryId so
+        // selecting it opens the country panel instead of only flying there.
+        const countryIdByName = new Map(
+          countryResults.map((c) => [c.name, c.countryId])
+        );
+        const linkedNominatim = nominatimResults.map((r) =>
+          r.type === "country" && countryIdByName.has(r.name)
+            ? { ...r, countryId: countryIdByName.get(r.name) }
+            : r
+        );
         const nominatimIds = new Set(nominatimResults.map((r) => r.name));
         const uniqueCountries = countryResults.filter(
           (c) => !nominatimIds.has(c.name)
         );
 
         startTransition(() => {
-          setResults([...nominatimResults, ...uniqueCountries].slice(0, 8));
+          setResults([...linkedNominatim, ...uniqueCountries].slice(0, 8));
           setLoading(false);
         });
       } catch {
